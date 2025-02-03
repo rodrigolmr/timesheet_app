@@ -1,0 +1,227 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/base_layout.dart';
+import '../widgets/title_box.dart';
+import '../widgets/custom_input_field.dart';
+import '../widgets/custom_button.dart';
+
+class NewUserScreen extends StatefulWidget {
+  const NewUserScreen({Key? key}) : super(key: key);
+
+  @override
+  State<NewUserScreen> createState() => _NewUserScreenState();
+}
+
+class _NewUserScreenState extends State<NewUserScreen> {
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  String _selectedRole = 'User'; // Default role
+  bool _isLoading = false;
+  String _errorMessage = '';
+
+  Future<void> _registerUser() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    // Verifica se senhas conferem
+    if (_passwordController.text.trim() !=
+        _confirmPasswordController.text.trim()) {
+      setState(() {
+        _errorMessage = "Passwords do not match.";
+        _isLoading = false;
+      });
+      return;
+    }
+
+    try {
+      final userCredential =
+          await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'firstName': _firstNameController.text.trim(),
+        'lastName': _lastNameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'role': _selectedRole,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      Navigator.pushReplacementNamed(context, '/login');
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = _getFirebaseErrorMessage(e.code);
+      });
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred. Try again.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _getFirebaseErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'email-already-in-use':
+        return 'This email is already registered.';
+      case 'weak-password':
+        return 'The password is too weak.';
+      case 'invalid-email':
+        return 'Invalid email format.';
+      default:
+        return 'Error registering user. Please try again.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const Color appBlueColor = Color(0xFF0205D3);
+    const Color appYellowColor = Color(0xFFFFFDD0);
+
+    return BaseLayout(
+      title: "Time Sheet",
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          children: [
+            const TitleBox(title: "New User"),
+            const SizedBox(height: 20),
+
+            // Nome
+            CustomInputField(
+              label: "First name",
+              hintText: "Enter your first name",
+              controller: _firstNameController,
+            ),
+            const SizedBox(height: 16),
+
+            // Sobrenome
+            CustomInputField(
+              label: "Last name",
+              hintText: "Enter your last name",
+              controller: _lastNameController,
+            ),
+            const SizedBox(height: 16),
+
+            // Email
+            CustomInputField(
+              label: "Email",
+              hintText: "Enter your email",
+              controller: _emailController,
+            ),
+            const SizedBox(height: 16),
+
+            // Senha
+            CustomInputField(
+              label: "Password",
+              hintText: "Enter your password",
+              controller: _passwordController,
+            ),
+            const SizedBox(height: 16),
+
+            // Confirmar senha
+            CustomInputField(
+              label: "Confirm password",
+              hintText: "Re-enter your password",
+              controller: _confirmPasswordController,
+            ),
+            const SizedBox(height: 16),
+
+            // Dropdown para Role no mesmo estilo
+            SizedBox(
+              width: 100,
+              height: 40,
+              child: DropdownButtonFormField<String>(
+                value: _selectedRole,
+                items: <String>['User', 'Admin']
+                    .map<DropdownMenuItem<String>>((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(
+                      value,
+                      style: const TextStyle(fontSize: 16),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  setState(() {
+                    _selectedRole = newValue ?? 'User';
+                  });
+                },
+                decoration: InputDecoration(
+                  labelText: 'Role',
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.black,
+                  ),
+                  floatingLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    color: appBlueColor,
+                  ),
+                  hintText: 'Select',
+                  hintStyle: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+
+                  // Fundo amarelo
+                  filled: true,
+                  fillColor: appYellowColor,
+
+                  // Borda azul de 1px antes de focar
+                  enabledBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: appBlueColor, width: 1),
+                  ),
+                  // Borda azul de 2px ao focar
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: appBlueColor, width: 2),
+                  ),
+                  // Fallback
+                  border: const OutlineInputBorder(
+                    borderSide: BorderSide(color: appBlueColor, width: 1),
+                  ),
+
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            if (_errorMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red, fontSize: 14),
+                ),
+              ),
+
+            _isLoading
+                ? const CircularProgressIndicator()
+                : CustomButton(
+                    type: ButtonType.addUserButton,
+                    onPressed: _registerUser,
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
