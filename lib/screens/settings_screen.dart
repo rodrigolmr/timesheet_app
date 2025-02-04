@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';

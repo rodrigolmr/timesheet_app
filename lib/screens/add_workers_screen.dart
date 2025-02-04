@@ -29,15 +29,10 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
   final GlobalKey<WorkerHoursInputSectionState> _workerSectionKey =
       GlobalKey<WorkerHoursInputSectionState>();
 
-  // Lista local (exibida na tabela)
   final List<Map<String, String>> _workersData = [];
-
   bool _showAddWorkerFirstMessage = false;
 
-  // Recebe o mesmo TimesheetData
   late TimesheetData timesheetData;
-
-  // Parâmetros de edição
   bool _editMode = false;
   String _docId = '';
 
@@ -55,9 +50,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
       timesheetData = TimesheetData();
     }
 
-    // -- SINCRONIZAR LISTAS:
-    // Sempre que voltar a esta tela, limpamos _workersData
-    // e re-adicionamos o que estiver em timesheetData.workers.
+    // Sincroniza a lista local com a do timesheetData
     _workersData.clear();
     _workersData.addAll(timesheetData.workers);
   }
@@ -97,7 +90,6 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
     final meal = _mealController.text.trim();
 
     setState(() {
-      // Cria o map com os dados do trabalhador
       final workerMap = {
         'name': name,
         'start': start,
@@ -108,12 +100,12 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
       };
 
       if (_editIndex == null) {
-        // ADD
+        // Add
         _workersData.add(workerMap);
         timesheetData.workers.add(workerMap);
         _clearOnlyName();
       } else {
-        // SAVE (edição de um item existente)
+        // Save (edição)
         _workersData[_editIndex!] = workerMap;
         timesheetData.workers[_editIndex!] = workerMap;
         _editIndex = null;
@@ -130,7 +122,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
       });
       return;
     }
-    // Passa timesheetData para Review
+    // Navega para ReviewTimeSheet
     Navigator.pushNamed(
       context,
       '/review-time-sheet',
@@ -154,7 +146,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
             const Center(child: TitleBox(title: "Add Workers")),
             const SizedBox(height: 20),
 
-            // Linha com Back, Add Worker e Next
+            // Barra com BACK, ADD Worker e NEXT
             SizedBox(
               width: 330,
               child: Row(
@@ -163,7 +155,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
                   CustomButton(
                     type: ButtonType.backButton,
                     onPressed: () {
-                      // Volta para new-time-sheet com timesheetData
+                      // Retorna para NewTimeSheetScreen com os dados atualizados:
                       Navigator.pushNamed(
                         context,
                         '/new-time-sheet',
@@ -193,7 +185,6 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
               ),
             ),
 
-            // Se não houver nenhum trabalhador, exibe aviso
             if (_showAddWorkerFirstMessage) ...[
               const SizedBox(height: 10),
               const Text(
@@ -209,7 +200,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
             ],
             const SizedBox(height: 20),
 
-            // Se estiver adicionando/ editando trabalhador
+            // Seção p/ adicionar/editar worker
             if (_showWorkerSection) ...[
               Container(
                 decoration: const BoxDecoration(
@@ -230,12 +221,12 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
               SizedBox(
                 width: 270,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Cancel mini => esconde a seção
                     CustomMiniButton(
                       type: MiniButtonType.cancelMiniButton,
                       onPressed: () {
@@ -247,7 +238,6 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
                         _workerSectionKey.currentState?.resetDropdown();
                       },
                     ),
-                    // Clear mini => limpa campos
                     CustomMiniButton(
                       type: MiniButtonType.clearMiniButton,
                       onPressed: () {
@@ -255,7 +245,6 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
                         _workerSectionKey.currentState?.resetDropdown();
                       },
                     ),
-                    // Add ou Save
                     CustomMiniButton(
                       type: _editIndex == null
                           ? MiniButtonType.addMiniButton
@@ -268,7 +257,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
               const SizedBox(height: 20),
             ],
 
-            // Exibe tabela se houver _workersData
+            // Tabela de workers
             if (_workersData.isNotEmpty) _buildWorkersTable(),
           ],
         ),
@@ -347,8 +336,7 @@ class _AddWorkersScreenState extends State<AddWorkersScreen> {
     );
   }
 
-  Widget _buildDataCell(String text,
-      {bool isBold = false, required int index}) {
+  Widget _buildDataCell(String text, {bool isBold = false, required int index}) {
     return InkWell(
       onTap: () {
         // Carrega dados para edição

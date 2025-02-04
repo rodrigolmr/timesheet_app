@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-// Enum exclusivo para botões mini
 enum MiniButtonType {
   saveMiniButton,
   cancelMiniButton,
@@ -8,13 +7,19 @@ enum MiniButtonType {
   addMiniButton,
   noteMiniButton,
   sortMiniButton,
-  deleteMiniButton, // Novo botão
-  editMiniButton,   // Novo botão
+  deleteMiniButton,
+  editMiniButton,
+  rangeMiniButton,
+  ascMiniButton,
+  descMiniButton,
+  applyMiniButton,
+  clearAllMiniButton,
+  closeMiniButton,
 }
 
 class CustomMiniButton extends StatelessWidget {
-  final MiniButtonType type; // Tipo do botão mini
-  final VoidCallback onPressed; // Função ao clicar no botão
+  final MiniButtonType type;
+  final VoidCallback onPressed;
 
   const CustomMiniButton({
     Key? key,
@@ -22,8 +27,16 @@ class CustomMiniButton extends StatelessWidget {
     required this.onPressed,
   }) : super(key: key);
 
-  // Configuração do estilo para botões mini
+  // Constantes com as propriedades comuns
+  static const double _miniButtonHeight = 25.0;
+  static const double _defaultButtonWidth = 60.0;
+  static const double _buttonBorderWidth = 4.0;
+  static const double _fontSize = 14.0;
+  static const double _borderRadius = 5.0;
+
   Map<String, dynamic> _getButtonConfig() {
+    // Para a maioria dos botões, a largura é a padrão (_defaultButtonWidth)
+    // Porém, para alguns botões, como Asc e Desc, a largura é diferente.
     switch (type) {
       case MiniButtonType.saveMiniButton:
         return {
@@ -31,8 +44,8 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF17DB4E),
           'borderColor': const Color(0xFF17DB4E),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
       case MiniButtonType.cancelMiniButton:
         return {
@@ -40,8 +53,8 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFFDE4545),
           'borderColor': const Color(0xFFDE4545),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
       case MiniButtonType.clearMiniButton:
         return {
@@ -49,8 +62,8 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFFFAB515),
           'borderColor': const Color(0xFFFAB515),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
       case MiniButtonType.addMiniButton:
         return {
@@ -58,8 +71,8 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF17DB4E),
           'borderColor': const Color(0xFF17DB4E),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
       case MiniButtonType.noteMiniButton:
         return {
@@ -67,8 +80,8 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF4287F5),
           'borderColor': const Color(0xFF4287F5),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
       case MiniButtonType.sortMiniButton:
         return {
@@ -76,26 +89,82 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF9C27B0),
           'borderColor': const Color(0xFF9C27B0),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
-      case MiniButtonType.deleteMiniButton: // Novo
+      case MiniButtonType.deleteMiniButton:
         return {
           'label': 'Del',
-          'backgroundColor': const Color(0xFFFF0000), // Vermelho
+          'backgroundColor': const Color(0xFFFF0000),
           'borderColor': const Color(0xFFFF0000),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
-      case MiniButtonType.editMiniButton: // Novo
+      case MiniButtonType.editMiniButton:
         return {
           'label': 'Edit',
-          'backgroundColor': const Color(0xFF2196F3), // Azul
+          'backgroundColor': const Color(0xFF2196F3),
           'borderColor': const Color(0xFF2196F3),
           'textColor': Colors.white,
-          'width': 60.0,
-          'height': 30.0,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.rangeMiniButton:
+        return {
+          'label': 'Range',
+          'backgroundColor': const Color(0xFF0277BD),
+          'borderColor': const Color(0xFF0277BD),
+          'textColor': Colors.white,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.ascMiniButton:
+        return {
+          'label': 'Asc',
+          'backgroundColor': const Color(0xFF0205D3),
+          'borderColor': const Color(0xFF0205D3),
+          'textColor': Colors.white,
+          // Largura específica para Asc
+          'width': 45.0,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.descMiniButton:
+        return {
+          'label': 'Desc',
+          'backgroundColor': const Color(0xFF0205D3),
+          'borderColor': const Color(0xFF0205D3),
+          'textColor': Colors.white,
+          // Largura específica para Desc
+          'width': 50.0,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.applyMiniButton:
+        return {
+          'label': 'Apply',
+          'backgroundColor': const Color(0xFF17DB4E),
+          'borderColor': const Color(0xFF17DB4E),
+          'textColor': Colors.white,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.clearAllMiniButton:
+        return {
+          'label': 'Clear',
+          'backgroundColor': const Color(0xFFFF0000),
+          'borderColor': const Color(0xFFFF0000),
+          'textColor': Colors.white,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.closeMiniButton:
+        return {
+          'label': 'Close',
+          'backgroundColor': const Color(0xFF757575),
+          'borderColor': const Color(0xFF757575),
+          'textColor': Colors.white,
+          'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
         };
     }
   }
@@ -103,7 +172,6 @@ class CustomMiniButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final config = _getButtonConfig();
-
     return SizedBox(
       width: config['width'],
       height: config['height'],
@@ -113,10 +181,10 @@ class CustomMiniButton extends StatelessWidget {
           backgroundColor: config['backgroundColor'],
           side: BorderSide(
             color: config['borderColor'],
-            width: 4.0,
+            width: _buttonBorderWidth,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(5.0),
+            borderRadius: BorderRadius.circular(_borderRadius),
           ),
           padding: EdgeInsets.zero,
         ),
@@ -124,7 +192,7 @@ class CustomMiniButton extends StatelessWidget {
           child: Text(
             config['label'],
             style: TextStyle(
-              fontSize: 14.0,
+              fontSize: _fontSize,
               fontWeight: FontWeight.bold,
               color: config['textColor'],
             ),

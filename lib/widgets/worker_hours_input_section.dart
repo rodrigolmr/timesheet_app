@@ -1,6 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// Supondo que você já tenha a classe TimeTextFormatter definida
 class TimeTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -8,12 +10,10 @@ class TimeTextFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     final bool isRemoving = newValue.text.length < oldValue.text.length;
-
     String digitsOnly = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
     if (digitsOnly.length > 4) {
       digitsOnly = digitsOnly.substring(0, 4);
     }
-
     String formatted;
     switch (digitsOnly.length) {
       case 0:
@@ -23,22 +23,20 @@ class TimeTextFormatter extends TextInputFormatter {
         formatted = digitsOnly;
         break;
       case 2:
-        // Ex.: "33" => "33" sem dois pontos
         formatted = digitsOnly;
         break;
       case 3:
-        // "330" => "3:30"
         formatted = digitsOnly[0] + ':' + digitsOnly.substring(1);
         break;
       default:
-        // "0830" => "08:30"
         formatted = digitsOnly.substring(0, 2) + ':' + digitsOnly.substring(2);
     }
-
     TextSelection newSelection;
     if (isRemoving) {
-      final baseOffset = newValue.selection.baseOffset.clamp(0, formatted.length);
-      final extentOffset = newValue.selection.extentOffset.clamp(0, formatted.length);
+      final baseOffset =
+          newValue.selection.baseOffset.clamp(0, formatted.length);
+      final extentOffset =
+          newValue.selection.extentOffset.clamp(0, formatted.length);
       newSelection = TextSelection(
         baseOffset: baseOffset,
         extentOffset: extentOffset,
@@ -46,7 +44,6 @@ class TimeTextFormatter extends TextInputFormatter {
     } else {
       newSelection = TextSelection.collapsed(offset: formatted.length);
     }
-
     return TextEditingValue(
       text: formatted,
       selection: newSelection,
@@ -77,7 +74,7 @@ class WorkerHoursInputSection extends StatefulWidget {
 }
 
 class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
-  final List<String> _nameOptions = ['Opção 1', 'Opção 2', 'Opção 3', 'Opção 4'];
+  List<String> _workerOptions = []; // Lista de workers carregados dinamicamente
   String? _selectedName;
 
   // Controla a borda vermelha do Name
@@ -101,6 +98,32 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
         });
       }
     });
+    _loadWorkers();
+  }
+
+  /// Carrega a lista de workers cadastrados no Firestore (coleção 'workers')
+  Future<void> _loadWorkers() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('workers').get();
+      List<String> workers = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final firstName = data['firstName'] ?? "";
+        final lastName = data['lastName'] ?? "";
+        final fullName = (firstName + " " + lastName).trim();
+        if (fullName.isNotEmpty) {
+          workers.add(fullName);
+        }
+      }
+      // Ordena alfabeticamente
+      workers.sort();
+      setState(() {
+        _workerOptions = workers;
+      });
+    } catch (e) {
+      print("Error loading workers: $e");
+    }
   }
 
   // Define erro no Name (4 bordas vermelhas)
@@ -117,7 +140,7 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
     });
   }
 
-  // resetDropdown -> volta Name para placeholder
+  // Reseta o dropdown para o placeholder
   void resetDropdown() {
     setState(() {
       _selectedName = null;
@@ -126,10 +149,10 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
     });
   }
 
-  // setDropdownValue -> usado ao editar registro
+  // Define o valor do dropdown (usado ao editar registro)
   void setDropdownValue(String newValue) {
     setState(() {
-      if (_nameOptions.contains(newValue)) {
+      if (_workerOptions.contains(newValue)) {
         _selectedName = newValue;
         widget.nameController.text = newValue;
       } else {
@@ -144,10 +167,9 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Dropdown Name (4 bordas)
+        // Dropdown para selecionar o worker
         GestureDetector(
           onTap: () {
-            // Ao clicar, se tem erro, remove
             if (_nameError) {
               setState(() {
                 _nameError = false;
@@ -186,7 +208,8 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
                   ),
                 ),
                 value: _selectedName,
-                items: _nameOptions.map<DropdownMenuItem<String>>((String value) {
+                items: _workerOptions
+                    .map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
                     child: Center(child: Text(value)),
@@ -196,15 +219,14 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
                   setState(() {
                     _selectedName = newValue;
                     widget.nameController.text = newValue ?? '';
-                    _nameError = false; // Remove erro se selecionou algo
+                    _nameError = false;
                   });
                 },
               ),
             ),
           ),
         ),
-
-        // Barra azul (Start, Finish, Hours, Travel, Meal)
+        // A seguir, o restante dos campos (barra azul e inputs) permanece inalterado.
         Container(
           width: 294,
           height: 20,
@@ -213,14 +235,12 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
             children: [
               _buildTitle('Start', 65),
               _buildTitle('Finish', 65),
-              _buildTitle('Hours', 60),
+              _buildTitle('Hours', 50),
               _buildTitle('Travel', 50),
               _buildTitle('Meal', 50),
             ],
           ),
         ),
-
-        // Linha inferior
         Container(
           width: 294,
           height: 30,
@@ -237,11 +257,16 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
           ),
           child: Row(
             children: [
-              _buildStartFinishField(widget.startController, width: 65, drawRightBorder: true),
-              _buildStartFinishField(widget.finishController, width: 65, drawRightBorder: true),
-              _buildHoursField(widget.hoursController, width: 60, drawRightBorder: true),
-              _buildDecimalField(widget.travelController, width: 50, drawRightBorder: true),
-              _buildNumberField(widget.mealController, width: 50, drawRightBorder: false),
+              _buildStartFinishField(widget.startController,
+                  width: 65, drawRightBorder: true),
+              _buildStartFinishField(widget.finishController,
+                  width: 65, drawRightBorder: true),
+              _buildHoursField(widget.hoursController,
+                  width: 50, drawRightBorder: true),
+              _buildDecimalField(widget.travelController,
+                  width: 50, drawRightBorder: true),
+              _buildNumberField(widget.mealController,
+                  width: 50, drawRightBorder: false),
             ],
           ),
         ),
@@ -300,7 +325,6 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
     );
   }
 
-  // Hours, com FocusNode p/ remover erro ao clicar no campo
   Widget _buildHoursField(
     TextEditingController controller, {
     required double width,
@@ -314,9 +338,6 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
           right: drawRightBorder
               ? const BorderSide(color: Color(0xFF0205D3), width: 1)
               : BorderSide.none,
-          left: BorderSide.none,
-          top: BorderSide.none,
-          bottom: BorderSide.none,
         ),
       ),
       child: TextField(
@@ -335,7 +356,6 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
         decoration: InputDecoration(
           isDense: true,
           contentPadding: EdgeInsets.zero,
-          // Se _hoursError = true, 4 bordas vermelhas
           enabledBorder: _hoursError
               ? OutlineInputBorder(
                   borderRadius: BorderRadius.zero,
@@ -356,7 +376,6 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
     );
   }
 
-  // Travel (decimais)
   Widget _buildDecimalField(
     TextEditingController controller, {
     required double width,
@@ -393,7 +412,6 @@ class WorkerHoursInputSectionState extends State<WorkerHoursInputSection> {
     );
   }
 
-  // Meal (inteiros)
   Widget _buildNumberField(
     TextEditingController controller, {
     required double width,

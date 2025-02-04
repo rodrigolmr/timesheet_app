@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -19,15 +19,53 @@ class TimesheetsScreen extends StatefulWidget {
 }
 
 class _TimesheetsScreenState extends State<TimesheetsScreen> {
-  bool _ordenacaoDecrescente = true;
-  DateTime? _dataInicial;
-  DateTime? _dataFinal;
-  bool _exibirContainerOrdenacao = false;
+  bool _showFilters = false;
+
+  /// Intervalo de datas escolhido no filtro
+  DateTimeRange? _selectedRange;
+
+  /// Indica se a ordenação é decrescente (default) ou não
+  bool _isDescending = true;
+
+  /// Map de timesheets selecionados para gerar PDF
   final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
+
+  /// Lista de nomes de “criadores” (Foreman) (com “Creator” como placeholder)
+  List<String> _creatorList = ["Creator"];
+  String _selectedCreator = "Creator";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCreators();
+  }
+
+  /// Carrega os nomes (Foreman) da coleção "users"
+  Future<void> _loadCreators() async {
+    try {
+      final snapshot =
+          await FirebaseFirestore.instance.collection('users').get();
+      final List<String> loaded = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final firstName = data["firstName"] ?? "";
+        final lastName = data["lastName"] ?? "";
+        final fullName = (firstName + " " + lastName).trim();
+        if (fullName.isNotEmpty) {
+          loaded.add(fullName);
+        }
+      }
+      loaded.sort();
+      setState(() {
+        _creatorList = ["Creator", ...loaded];
+      });
+    } catch (e) {
+      debugPrint("Error loading creators: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final query = _construirQueryTimesheets();
     return BaseLayout(
       title: "Time Sheet",
       child: Column(
@@ -35,32 +73,149 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
           const SizedBox(height: 16),
           const Center(child: TitleBox(title: "Timesheets")),
           const SizedBox(height: 20),
-          _construirBarraSuperior(context),
-          if (_exibirContainerOrdenacao) ...[
+
+          _buildTopBar(),
+
+          if (_showFilters) ...[
             const SizedBox(height: 20),
-            _construirContainerFiltros(),
+            _buildFilterContainer(context),
           ],
+
+          // Exibe a lista de timesheets (filtrada e ordenada em memória)
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
-              stream: query.snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('timesheets')
+                  .snapshots(), // sem orderBy
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
-                      child: Text('Erro ao carregar: ${snapshot.error}'));
+                    child: Text("Error loading data: ${snapshot.error}"),
+                  );
                 }
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final dados = snapshot.data;
-                if (dados == null || dados.docs.isEmpty) {
-                  return const Center(
-                      child: Text('Nenhum timesheet encontrado.'));
+
+                final data = snapshot.data;
+                if (data == null || data.docs.isEmpty) {
+                  return const Center(child: Text("No timesheets found."));
                 }
+
+                // 1) Convertemos docs para uma lista manipulável
+                var items = data.docs.map((doc) {
+                  final mapData = doc.data() as Map<String, dynamic>;
+                  final docId = doc.id;
+
+                  // Pega o campo "date" (string)
+                  final rawDateString = mapData['date'] ?? '';
+
+                  // Parse para DateTime
+                  DateTime? parsedDate;
+                  try {
+                    // Ajuste o formato se precisar (ex.: "M/d/yy, EEEE")
+                    parsedDate =
+                        DateFormat("M/d/yy, EEEE").parse(rawDateString);
+                  } catch (e) {
+                    // Se der erro, parsedDate fica nulo
+                  }
+
+                  return {
+                    'doc': doc,
+                    'docId': docId,
+                    'data': mapData,
+                    'dateString': rawDateString, // só pra referência
+                    'parsedDate': parsedDate,
+                  };
+                }).toList();
+
+                // 2) Filtro por "Foreman" se != "Creator"
+                if (_selectedCreator != "Creator") {
+                  items = items.where((item) {
+                    final foreman = item['data']['foreman'] ?? '';
+                    return foreman == _selectedCreator;
+                  }).toList();
+                }
+
+                // 3) Filtro por data (usando _selectedRange, e parsedDate)
+                if (_selectedRange != null) {
+                  final start = _selectedRange!.start;
+                  final end = _selectedRange!.end;
+
+                  items = items.where((item) {
+                    final dt = item['parsedDate'] as DateTime?;
+                    if (dt == null) return false; // se não parseou, filtra fora
+                    return dt
+                            .isAfter(start.subtract(const Duration(days: 1))) &&
+                        dt.isBefore(end.add(const Duration(days: 1)));
+                  }).toList();
+                }
+
+                // 4) Ordena (asc/desc) pelo parsedDate
+                items.sort((a, b) {
+                  final dtA = a['parsedDate'] as DateTime?;
+                  final dtB = b['parsedDate'] as DateTime?;
+                  // caso dtA ou dtB seja null
+                  if (dtA == null && dtB == null) return 0;
+                  if (dtA == null) return _isDescending ? 1 : -1;
+                  if (dtB == null) return _isDescending ? -1 : 1;
+
+                  // se ambos existem
+                  final cmp = dtA.compareTo(dtB); // asc
+                  return _isDescending ? -cmp : cmp;
+                });
+
+                // 5) Monta a ListView
                 return ListView.builder(
-                  itemCount: dados.docs.length,
+                  itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final doc = dados.docs[index];
-                    return _construirItemLista(doc);
+                    final item = items[index];
+                    final docId = item['docId'] as String;
+                    final mapData = item['data'] as Map<String, dynamic>;
+                    final foreman = mapData['foreman'] ?? '';
+                    final jobName = mapData['jobName'] ?? '';
+
+                    // parse data => day / month
+                    String day = '--';
+                    String month = '--';
+                    final dtParsed = item['parsedDate'] as DateTime?;
+                    if (dtParsed != null) {
+                      day = DateFormat('d').format(dtParsed);
+                      month = DateFormat('MMM').format(dtParsed);
+                    }
+
+                    // se já estava marcado (pdf)
+                    final bool isChecked =
+                        _selectedTimesheets.containsKey(docId);
+
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/timesheet-view',
+                          arguments: {'docId': docId},
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: TimeSheetRowItem(
+                          day: day,
+                          month: month,
+                          jobName: jobName,
+                          userName: foreman.isNotEmpty ? foreman : "User",
+                          initialChecked: isChecked,
+                          onCheckChanged: (checked) {
+                            setState(() {
+                              if (checked) {
+                                _selectedTimesheets[docId] = mapData;
+                              } else {
+                                _selectedTimesheets.remove(docId);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    );
                   },
                 );
               },
@@ -71,326 +226,238 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     );
   }
 
-  Query<Map<String, dynamic>> _construirQueryTimesheets() {
-    Query<Map<String, dynamic>> query =
-        FirebaseFirestore.instance.collection('timesheets');
-    if (_dataInicial != null) {
-      query = query.where('timestamp',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(_dataInicial!));
-    }
-    if (_dataFinal != null) {
-      final dataFinalAjustada = DateTime(
-        _dataFinal!.year,
-        _dataFinal!.month,
-        _dataFinal!.day,
-        23,
-        59,
-        59,
-      );
-      query = query.where('timestamp',
-          isLessThanOrEqualTo: Timestamp.fromDate(dataFinalAjustada));
-    }
-    query = query.orderBy('timestamp', descending: _ordenacaoDecrescente);
-    return query;
-  }
-
-  Widget _construirItemLista(QueryDocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
-    final jobName = data['jobName'] ?? '';
-    final foreman = data['foreman'] ?? '';
-    final dateStr = data['date'] ?? '';
-    final Timestamp? ts = data['timestamp'];
-    String dia = '';
-    String mesAbreviado = '';
-    if (ts != null) {
-      final dataT = ts.toDate();
-      dia = DateFormat('d').format(dataT);
-      mesAbreviado = DateFormat('MMM').format(dataT);
-    } else {
-      final resultadoParse = _extrairDiaMes(dateStr);
-      dia = resultadoParse['dia'] ?? '';
-      mesAbreviado = resultadoParse['mes'] ?? '';
-    }
-    final userName = foreman.isNotEmpty ? foreman : 'User';
-    final timesheetId = doc.id;
-    final bool isChecked = _selectedTimesheets.containsKey(timesheetId);
-    return GestureDetector(
-      onTap: () {
-        Navigator.pushNamed(context, '/timesheet-view',
-            arguments: {'docId': timesheetId});
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 5),
-        child: TimeSheetRowItem(
-          day: dia,
-          month: mesAbreviado,
-          jobName: jobName,
-          userName: userName,
-          initialChecked: isChecked,
-          onCheckChanged: (marcado) {
-            setState(() {
-              if (marcado) {
-                _selectedTimesheets[timesheetId] = data;
-              } else {
-                _selectedTimesheets.remove(timesheetId);
-              }
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _construirBarraSuperior(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 320,
-        height: 60,
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            CustomButton(
-              type: ButtonType.newButton,
-              onPressed: () {
-                Navigator.pushNamed(context, '/new-time-sheet');
-              },
-            ),
-            CustomButton(
-              type: ButtonType.pdfButton,
-              onPressed: _generatePdf,
-            ),
-            CustomMiniButton(
-              type: MiniButtonType.sortMiniButton,
-              onPressed: () {
-                setState(() {
-                  _exibirContainerOrdenacao = !_exibirContainerOrdenacao;
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _construirContainerFiltros() {
-    return Center(
-      child: Container(
-        width: 240,
-        height: 97,
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFD0DAFF),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _construirSecaoOrdenacaoData(),
-            _construirSecaoDatas(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _construirSecaoOrdenacaoData() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: const Color(0xFF0205D3), width: 2),
+  /// Barra superior (New, PDF, Sort)
+  Widget _buildTopBar() {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          CustomButton(
+            type: ButtonType.newButton,
+            onPressed: () {
+              Navigator.pushNamed(context, '/new-time-sheet');
+            },
           ),
-          child: const Text(
-            "Date",
-            style: TextStyle(
-                color: Color(0xFF0205D3),
-                fontWeight: FontWeight.bold,
-                fontSize: 16),
+          CustomButton(
+            type: ButtonType.pdfButton,
+            onPressed: _generatePdf,
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _ordenacaoDecrescente = true;
-                });
-              },
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: _ordenacaoDecrescente
-                      ? const Color(0xFF0205D3)
-                      : const Color(0xFFBDBDBD),
-                  borderRadius: BorderRadius.circular(4),
+          CustomMiniButton(
+            type: MiniButtonType.sortMiniButton,
+            onPressed: () {
+              setState(() {
+                _showFilters = !_showFilters;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Container do filtro
+  Widget _buildFilterContainer(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0FF),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Linha 1: Range / datas / asc / desc
+          Row(
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0277BD),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(80, 40),
                 ),
-                child: const Icon(Icons.arrow_downward,
-                    color: Colors.white, size: 20),
+                onPressed: () => _pickDateRange(context),
+                child: const Text("Range"),
               ),
-            ),
-            const SizedBox(width: 6),
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _ordenacaoDecrescente = false;
-                });
-              },
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: !_ordenacaoDecrescente
-                      ? const Color(0xFF0205D3)
-                      : const Color(0xFFE0E0E0),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Icon(
-                  Icons.arrow_upward,
-                  color:
-                      !_ordenacaoDecrescente ? Colors.white : Colors.grey[700],
-                  size: 20,
+              const SizedBox(width: 8),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: _selectedRange == null
+                      ? const Text(
+                          "No date range",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                        )
+                      : Text(
+                          "${DateFormat('MMM/dd').format(_selectedRange!.start)} - "
+                          "${DateFormat('MMM/dd').format(_selectedRange!.end)}",
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                        ),
                 ),
               ),
+              const SizedBox(width: 8),
+              _buildSquareArrowButton(
+                icon: Icons.arrow_upward,
+                isActive: !_isDescending,
+                onTap: () => setState(() => _isDescending = false),
+              ),
+              const SizedBox(width: 8),
+              _buildSquareArrowButton(
+                icon: Icons.arrow_downward,
+                isActive: _isDescending,
+                onTap: () => setState(() => _isDescending = true),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Linha 2: Dropdown Creator
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: const Color(0xFF0205D3), width: 2),
+              borderRadius: BorderRadius.circular(4),
             ),
-          ],
-        ),
-      ],
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _selectedCreator,
+                style: const TextStyle(fontSize: 14, color: Colors.black),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedCreator = value;
+                    });
+                  }
+                },
+                items: _creatorList.map((creator) {
+                  return DropdownMenuItem<String>(
+                    value: creator,
+                    child: Text(creator),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Linha 3: [Clear], [Apply], [Close]
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              CustomMiniButton(
+                type: MiniButtonType.clearAllMiniButton,
+                onPressed: () {
+                  setState(() {
+                    _selectedRange = null;
+                    _isDescending = true;
+                    _selectedCreator = "Creator";
+                  });
+                },
+              ),
+              CustomMiniButton(
+                type: MiniButtonType.applyMiniButton,
+                onPressed: () {
+                  setState(() {
+                    _showFilters = false;
+                  });
+                },
+              ),
+              CustomMiniButton(
+                type: MiniButtonType.closeMiniButton,
+                onPressed: () {
+                  setState(() {
+                    _showFilters = false;
+                  });
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _construirSecaoDatas() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _construirDateBox(
-          rotulo: "Initial date",
-          dataSelecionada: _dataInicial,
-          aoEscolherData: (dataEscolhida) {
-            setState(() {
-              _dataInicial = dataEscolhida;
-              if (_dataFinal != null && _dataInicial!.isAfter(_dataFinal!)) {
-                _dataFinal = null;
-              }
-            });
-          },
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          "to",
-          style: TextStyle(fontSize: 14, color: Color(0xFF5A5A5A)),
-        ),
-        const SizedBox(height: 4),
-        _construirDateBox(
-          rotulo: "Final date",
-          dataSelecionada: _dataFinal,
-          aoEscolherData: (dataEscolhida) {
-            setState(() {
-              _dataFinal = dataEscolhida;
-              if (_dataInicial != null && _dataFinal!.isBefore(_dataInicial!)) {
-                _dataInicial = null;
-              }
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _construirDateBox({
-    required String rotulo,
-    required DateTime? dataSelecionada,
-    required Function(DateTime) aoEscolherData,
+  /// Botão quadrado 40x40 com apenas a seta
+  Widget _buildSquareArrowButton({
+    required IconData icon,
+    required bool isActive,
+    required VoidCallback onTap,
   }) {
     return InkWell(
-      onTap: () => _selecionarData(dataSelecionada, aoEscolherData),
+      onTap: onTap,
       child: Container(
-        width: 90,
-        height: 26,
-        alignment: Alignment.center,
+        width: 40,
+        height: 40,
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFF0205D3), width: 2),
+          color: isActive ? const Color(0xFF0205D3) : Colors.grey,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          dataSelecionada == null
-              ? rotulo
-              : DateFormat('dd/MM/yyyy').format(dataSelecionada),
-          style: const TextStyle(fontSize: 12, color: Color(0xFF9E9E9E)),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: 20,
         ),
       ),
     );
   }
 
-  Future<void> _selecionarData(
-      DateTime? valorAtual, Function(DateTime) aoEscolherData) async {
-    final agora = DateTime.now();
-    final dataInicial = DateTime(2000);
-    final dataFinal = DateTime(2100);
-    final dataInicialPicker = valorAtual ?? agora;
-    final escolhida = await showDatePicker(
+  /// Abre o DateRangePicker
+  Future<void> _pickDateRange(BuildContext context) async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
       context: context,
-      initialDate: dataInicialPicker,
-      firstDate: dataInicial,
-      lastDate: dataFinal,
+      initialDateRange: _selectedRange ??
+          DateTimeRange(
+            start: now.subtract(const Duration(days: 7)),
+            end: now,
+          ),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
     );
-    if (escolhida != null) {
-      aoEscolherData(escolhida);
+    if (selected != null) {
+      setState(() {
+        _selectedRange = selected;
+      });
     }
   }
 
-  Map<String, String> _extrairDiaMes(String dataString) {
-    try {
-      final partes = dataString.split('/');
-      if (partes.length < 2) {
-        return {'dia': '', 'mes': ''};
-      }
-      final parteDia = partes[1];
-      final diaSemVirgula = parteDia.split(',').first.trim();
-      final dia = diaSemVirgula;
-      final parteMes = partes[0];
-      final mesNumero = int.tryParse(parteMes) ?? 0;
-      final meses = {
-        1: 'Jan',
-        2: 'Feb',
-        3: 'Mar',
-        4: 'Apr',
-        5: 'May',
-        6: 'Jun',
-        7: 'Jul',
-        8: 'Aug',
-        9: 'Sep',
-        10: 'Oct',
-        11: 'Nov',
-        12: 'Dec',
-      };
-      final mesNome = meses[mesNumero] ?? '';
-      return {'dia': dia, 'mes': mesNome};
-    } catch (e) {
-      return {'dia': '', 'mes': ''};
-    }
-  }
-
+  /// Gera PDF a partir dos timesheets selecionados
   Future<void> _generatePdf() async {
     if (_selectedTimesheets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nenhum timesheet selecionado!')));
+        const SnackBar(content: Text("No timesheet selected.")),
+      );
       return;
     }
     try {
       await PdfService().generateTimesheetPdf(_selectedTimesheets);
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PDF gerado com sucesso!')));
+        const SnackBar(content: Text("PDF generated successfully!")),
+      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error generating PDF: $e")),
+      );
     }
   }
 }

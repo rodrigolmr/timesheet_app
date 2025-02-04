@@ -19,7 +19,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
   bool _showNoteField = false;
   final TextEditingController _noteController = TextEditingController();
 
-  // Envia dados ao Firestore, incluindo `notes`
   Future<void> _submitTimesheet(
     TimesheetData timesheetData,
     bool editMode,
@@ -28,7 +27,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     try {
       final collection = FirebaseFirestore.instance.collection('timesheets');
       if (editMode && docId.isNotEmpty) {
-        // Atualiza o documento existente
+        // Update
         await collection.doc(docId).update({
           'jobName': timesheetData.jobName,
           'date': timesheetData.date,
@@ -42,9 +41,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'workers': timesheetData.workers,
           'timestamp': FieldValue.serverTimestamp(),
         });
-        print('Timesheet atualizado com sucesso!');
       } else {
-        // Adiciona um novo documento
+        // Create new
         await collection.add({
           'jobName': timesheetData.jobName,
           'date': timesheetData.date,
@@ -58,10 +56,11 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'workers': timesheetData.workers,
           'timestamp': FieldValue.serverTimestamp(),
         });
-        print('Timesheet enviado com sucesso!');
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Timesheet salvo com sucesso!')),
+      );
     } catch (e) {
-      print('Erro ao enviar o timesheet: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao enviar o timesheet: $e')),
       );
@@ -72,7 +71,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
   Widget build(BuildContext context) {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
     final bool editMode = args != null ? (args['editMode'] ?? false) : false;
     final String docId = args != null ? (args['docId'] ?? '') : '';
     final TimesheetData? timesheetData =
@@ -95,15 +93,20 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                 CustomButton(
                   type: ButtonType.backButton,
                   onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/add-workers',
-                      arguments: {
-                        'editMode': editMode,
-                        'docId': docId,
-                        'timesheetData': timesheetData,
-                      },
-                    );
+                    // Volta para AddWorkersScreen, mas usando pushNamed
+                    if (timesheetData != null) {
+                      Navigator.pushNamed(
+                        context,
+                        '/add-workers',
+                        arguments: {
+                          'editMode': editMode,
+                          'docId': docId,
+                          'timesheetData': timesheetData,
+                        },
+                      );
+                    } else {
+                      Navigator.pop(context);
+                    }
                   },
                 ),
               ],
@@ -115,7 +118,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
             else
               _buildReviewLayout(timesheetData),
 
-            // Exibe a nota fora da borda, se existir
             if (timesheetData != null && timesheetData.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
@@ -152,14 +154,13 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
 
             const SizedBox(height: 20),
 
-            // Campo de Notas: se fechado, exibe "Note"
+            // Botão para abrir/editar nota
             if (!_showNoteField)
               CustomMiniButton(
                 type: MiniButtonType.noteMiniButton,
                 onPressed: () {
                   setState(() {
                     _showNoteField = true;
-                    // Se já tem algo salvo, carrega
                     if (timesheetData != null) {
                       _noteController.text = timesheetData.notes;
                     }
@@ -189,10 +190,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                       decoration: const InputDecoration(
                         border: InputBorder.none,
                         hintText: "Add a note",
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF9C9C9C),
-                        ),
                       ),
                     ),
                   ),
@@ -200,7 +197,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // CANCEL
                       CustomMiniButton(
                         type: MiniButtonType.cancelMiniButton,
                         onPressed: () {
@@ -210,7 +206,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      // CLEAR
                       CustomMiniButton(
                         type: MiniButtonType.clearMiniButton,
                         onPressed: () {
@@ -220,7 +215,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      // SAVE
                       CustomMiniButton(
                         type: MiniButtonType.saveMiniButton,
                         onPressed: () {
@@ -239,7 +233,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
 
             const SizedBox(height: 20),
 
-            // BOTÃO SUBMIT
+            // SUBMIT
             SizedBox(
               width: 330,
               child: Row(
@@ -250,6 +244,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                     onPressed: () async {
                       if (timesheetData != null) {
                         await _submitTimesheet(timesheetData, editMode, docId);
+                        // Depois de salvar, volta para Home
                         Navigator.pushNamedAndRemoveUntil(
                           context,
                           '/home',
@@ -298,8 +293,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
       ),
     );
   }
-
-  // Métodos privados para montar cada parte do layout
 
   Widget _buildTitleTimeSheet(String text) {
     return Container(
@@ -555,10 +548,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     );
   }
 
-  // Constrói a tabela com os workers
   Widget _buildWorkersTable(List<Map<String, String>> workers) {
     final rows = <TableRow>[
-      // Cabeçalho
       TableRow(
         decoration: const BoxDecoration(color: Color(0xFFEFEFEF)),
         children: [
@@ -570,7 +561,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           _buildHeaderCell("MEAL", fontSize: 8, textAlign: TextAlign.center),
         ],
       ),
-      // Dados
       for (final w in workers)
         TableRow(
           children: [
@@ -590,7 +580,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
         ),
     ];
 
-    // Acrescenta 4 linhas vazias
+    // Adiciona 4 linhas vazias
     for (int i = 0; i < 4; i++) {
       rows.add(
         TableRow(
