@@ -21,8 +21,13 @@ class TimesheetsScreen extends StatefulWidget {
 class _TimesheetsScreenState extends State<TimesheetsScreen> {
   bool _showFilters = false;
 
-  /// Intervalo de datas escolhido no filtro
+  /// Variáveis para edição dos filtros (usadas na UI do container)
   DateTimeRange? _selectedRange;
+  String _selectedCreator = "Creator";
+
+  /// Variáveis "aplicadas" que serão usadas para filtrar os itens
+  DateTimeRange? _appliedRange;
+  String _appliedCreator = "Creator";
 
   /// Indica se a ordenação é decrescente (default) ou não
   bool _isDescending = true;
@@ -30,9 +35,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
   /// Map de timesheets selecionados para gerar PDF
   final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
 
+  /// Lista que armazenará os itens filtrados (para uso no "Select All")
+  List<Map<String, dynamic>> _currentItems = [];
+
   /// Lista de nomes de “criadores” (Foreman) (com “Creator” como placeholder)
   List<String> _creatorList = ["Creator"];
-  String _selectedCreator = "Creator";
 
   @override
   void initState() {
@@ -73,20 +80,17 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
           const SizedBox(height: 16),
           const Center(child: TitleBox(title: "Timesheets")),
           const SizedBox(height: 20),
-
           _buildTopBar(),
-
           if (_showFilters) ...[
             const SizedBox(height: 20),
             _buildFilterContainer(context),
           ],
-
           // Exibe a lista de timesheets (filtrada e ordenada em memória)
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('timesheets')
-                  .snapshots(), // sem orderBy
+                  .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
@@ -96,95 +100,87 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 final data = snapshot.data;
                 if (data == null || data.docs.isEmpty) {
                   return const Center(child: Text("No timesheets found."));
                 }
 
-                // 1) Convertemos docs para uma lista manipulável
-                var items = data.docs.map((doc) {
-                  final mapData = doc.data() as Map<String, dynamic>;
-                  final docId = doc.id;
-
-                  // Pega o campo "date" (string)
+                // Converter docs para uma lista manipulável com declaração explícita de tipo
+                final List<Map<String, dynamic>> items = data.docs.map((doc) {
+                  final Map<String, dynamic> mapData =
+                      doc.data() as Map<String, dynamic>;
+                  final String docId = doc.id;
                   final rawDateString = mapData['date'] ?? '';
-
-                  // Parse para DateTime
                   DateTime? parsedDate;
                   try {
-                    // Ajuste o formato se precisar (ex.: "M/d/yy, EEEE")
                     parsedDate =
                         DateFormat("M/d/yy, EEEE").parse(rawDateString);
-                  } catch (e) {
-                    // Se der erro, parsedDate fica nulo
+                  } catch (_) {
+                    parsedDate = null;
                   }
-
                   return {
-                    'doc': doc,
                     'docId': docId,
                     'data': mapData,
-                    'dateString': rawDateString, // só pra referência
                     'parsedDate': parsedDate,
                   };
                 }).toList();
 
-                // 2) Filtro por "Foreman" se != "Creator"
-                if (_selectedCreator != "Creator") {
-                  items = items.where((item) {
-                    final foreman = item['data']['foreman'] ?? '';
-                    return foreman == _selectedCreator;
-                  }).toList();
+                // Filtro por "Foreman" usando os filtros aplicados
+                if (_appliedCreator != "Creator") {
+                  items.retainWhere((item) {
+                    final Map<String, dynamic> mapData =
+                        item['data'] as Map<String, dynamic>;
+                    final foreman = mapData['foreman'] ?? '';
+                    return foreman == _appliedCreator;
+                  });
                 }
 
-                // 3) Filtro por data (usando _selectedRange, e parsedDate)
-                if (_selectedRange != null) {
-                  final start = _selectedRange!.start;
-                  final end = _selectedRange!.end;
-
-                  items = items.where((item) {
-                    final dt = item['parsedDate'] as DateTime?;
-                    if (dt == null) return false; // se não parseou, filtra fora
+                // Filtro por data usando _appliedRange
+                if (_appliedRange != null) {
+                  final start = _appliedRange!.start;
+                  final end = _appliedRange!.end;
+                  items.retainWhere((item) {
+                    final DateTime? dt = item['parsedDate'] as DateTime?;
+                    if (dt == null) return false;
                     return dt
                             .isAfter(start.subtract(const Duration(days: 1))) &&
                         dt.isBefore(end.add(const Duration(days: 1)));
-                  }).toList();
+                  });
                 }
 
-                // 4) Ordena (asc/desc) pelo parsedDate
+                // Ordena (asc/desc) pelo parsedDate
                 items.sort((a, b) {
-                  final dtA = a['parsedDate'] as DateTime?;
-                  final dtB = b['parsedDate'] as DateTime?;
-                  // caso dtA ou dtB seja null
+                  final DateTime? dtA = a['parsedDate'] as DateTime?;
+                  final DateTime? dtB = b['parsedDate'] as DateTime?;
                   if (dtA == null && dtB == null) return 0;
                   if (dtA == null) return _isDescending ? 1 : -1;
                   if (dtB == null) return _isDescending ? -1 : 1;
-
-                  // se ambos existem
-                  final cmp = dtA.compareTo(dtB); // asc
+                  final cmp = dtA.compareTo(dtB);
                   return _isDescending ? -cmp : cmp;
                 });
 
-                // 5) Monta a ListView
+                // Armazena essa lista filtrada para uso no "Select All"
+                _currentItems = items;
+
                 return ListView.builder(
                   itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final item = items[index];
-                    final docId = item['docId'] as String;
-                    final mapData = item['data'] as Map<String, dynamic>;
-                    final foreman = mapData['foreman'] ?? '';
-                    final jobName = mapData['jobName'] ?? '';
+                    final Map<String, dynamic> item = items[index];
+                    final String docId = item['docId'] as String;
+                    final Map<String, dynamic> mapData =
+                        item['data'] as Map<String, dynamic>;
+                    final String foreman = mapData['foreman'] ?? '';
+                    final String jobName = mapData['jobName'] ?? '';
 
-                    // parse data => day / month
+                    // Converte a data para obter dia e mês
                     String day = '--';
                     String month = '--';
-                    final dtParsed = item['parsedDate'] as DateTime?;
+                    final DateTime? dtParsed = item['parsedDate'] as DateTime?;
                     if (dtParsed != null) {
                       day = DateFormat('d').format(dtParsed);
                       month = DateFormat('MMM').format(dtParsed);
                     }
 
-                    // se já estava marcado (pdf)
                     final bool isChecked =
                         _selectedTimesheets.containsKey(docId);
 
@@ -226,38 +222,75 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     );
   }
 
-  /// Barra superior (New, PDF, Sort)
+  /// Barra superior com os botões New e PDF à esquerda e, à direita, uma coluna com:
+  /// - Na primeira linha: os mini botões (Sort, ALL e NONE)
+  /// - Na segunda linha: o texto "Selected: X"
+  /// A barra toda fica a 15px da lateral do dispositivo.
   Widget _buildTopBar() {
-    return SizedBox(
-      width: double.infinity,
-      height: 60,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          CustomButton(
-            type: ButtonType.newButton,
-            onPressed: () {
-              Navigator.pushNamed(context, '/new-time-sheet');
-            },
-          ),
-          CustomButton(
-            type: ButtonType.pdfButton,
-            onPressed: _generatePdf,
-          ),
-          CustomMiniButton(
-            type: MiniButtonType.sortMiniButton,
-            onPressed: () {
-              setState(() {
-                _showFilters = !_showFilters;
-              });
-            },
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      child: SizedBox(
+        height: 60,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Lado esquerdo: Botões New e PDF
+            Row(
+              children: [
+                CustomButton(
+                  type: ButtonType.newButton,
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/new-time-sheet');
+                  },
+                ),
+                const SizedBox(width: 20),
+                CustomButton(
+                  type: ButtonType.pdfButton,
+                  onPressed: _generatePdf,
+                ),
+              ],
+            ),
+            // Lado direito: Coluna com mini botões e contagem
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    CustomMiniButton(
+                      type: MiniButtonType.sortMiniButton,
+                      onPressed: () {
+                        setState(() {
+                          _showFilters = !_showFilters;
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 4),
+                    CustomMiniButton(
+                      type: MiniButtonType.selectAllMiniButton,
+                      onPressed: _handleSelectAll,
+                    ),
+                    const SizedBox(width: 4),
+                    CustomMiniButton(
+                      type: MiniButtonType.deselectAllMiniButton,
+                      onPressed: _handleDeselectAll,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Selected: ${_selectedTimesheets.length}",
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// Container do filtro
+  /// Container do filtro (mantido inalterado)
   Widget _buildFilterContainer(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -303,8 +336,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                           maxLines: 1,
                         )
                       : Text(
-                          "${DateFormat('MMM/dd').format(_selectedRange!.start)} - "
-                          "${DateFormat('MMM/dd').format(_selectedRange!.end)}",
+                          "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
@@ -328,14 +360,16 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             ],
           ),
           const SizedBox(height: 10),
-
           // Linha 2: Dropdown Creator
           Container(
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border.all(color: const Color(0xFF0205D3), width: 2),
+              border: Border.all(
+                color: const Color(0xFF0205D3),
+                width: 2,
+              ),
               borderRadius: BorderRadius.circular(4),
             ),
             child: DropdownButtonHideUnderline(
@@ -359,7 +393,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             ),
           ),
           const SizedBox(height: 10),
-
           // Linha 3: [Clear], [Apply], [Close]
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -369,8 +402,9 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 onPressed: () {
                   setState(() {
                     _selectedRange = null;
-                    _isDescending = true;
                     _selectedCreator = "Creator";
+                    _appliedRange = null;
+                    _appliedCreator = "Creator";
                   });
                 },
               ),
@@ -378,6 +412,9 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 type: MiniButtonType.applyMiniButton,
                 onPressed: () {
                   setState(() {
+                    // Ao pressionar "Apply", os filtros editados são aplicados
+                    _appliedRange = _selectedRange;
+                    _appliedCreator = _selectedCreator;
                     _showFilters = false;
                   });
                 },
@@ -459,5 +496,23 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         SnackBar(content: Text("Error generating PDF: $e")),
       );
     }
+  }
+
+  /// Seleciona todos os items atualmente listados
+  void _handleSelectAll() {
+    setState(() {
+      for (var item in _currentItems) {
+        final String docId = item['docId'] as String;
+        final Map<String, dynamic> map = item['data'] as Map<String, dynamic>;
+        _selectedTimesheets[docId] = map;
+      }
+    });
+  }
+
+  /// Remove a seleção de todos
+  void _handleDeselectAll() {
+    setState(() {
+      _selectedTimesheets.clear();
+    });
   }
 }

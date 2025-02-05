@@ -15,6 +15,8 @@ enum MiniButtonType {
   applyMiniButton,
   clearAllMiniButton,
   closeMiniButton,
+  selectAllMiniButton, // <--- Adicionado
+  deselectAllMiniButton, // <--- Adicionado
 }
 
 class CustomMiniButton extends StatelessWidget {
@@ -27,7 +29,6 @@ class CustomMiniButton extends StatelessWidget {
     required this.onPressed,
   }) : super(key: key);
 
-  // Constantes com as propriedades comuns
   static const double _miniButtonHeight = 25.0;
   static const double _defaultButtonWidth = 60.0;
   static const double _buttonBorderWidth = 4.0;
@@ -35,8 +36,6 @@ class CustomMiniButton extends StatelessWidget {
   static const double _borderRadius = 5.0;
 
   Map<String, dynamic> _getButtonConfig() {
-    // Para a maioria dos botões, a largura é a padrão (_defaultButtonWidth)
-    // Porém, para alguns botões, como Asc e Desc, a largura é diferente.
     switch (type) {
       case MiniButtonType.saveMiniButton:
         return {
@@ -125,7 +124,6 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF0205D3),
           'borderColor': const Color(0xFF0205D3),
           'textColor': Colors.white,
-          // Largura específica para Asc
           'width': 45.0,
           'height': _miniButtonHeight,
         };
@@ -135,7 +133,6 @@ class CustomMiniButton extends StatelessWidget {
           'backgroundColor': const Color(0xFF0205D3),
           'borderColor': const Color(0xFF0205D3),
           'textColor': Colors.white,
-          // Largura específica para Desc
           'width': 50.0,
           'height': _miniButtonHeight,
         };
@@ -164,6 +161,24 @@ class CustomMiniButton extends StatelessWidget {
           'borderColor': const Color(0xFF757575),
           'textColor': Colors.white,
           'width': _defaultButtonWidth,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.selectAllMiniButton:
+        return {
+          'label': 'All',
+          'backgroundColor': const Color(0xFF0205D3),
+          'borderColor': const Color(0xFF0205D3),
+          'textColor': Colors.white,
+          'width': 50.0,
+          'height': _miniButtonHeight,
+        };
+      case MiniButtonType.deselectAllMiniButton:
+        return {
+          'label': 'None',
+          'backgroundColor': const Color(0xFF9E9E9E),
+          'borderColor': const Color(0xFF9E9E9E),
+          'textColor': Colors.white,
+          'width': 50.0,
           'height': _miniButtonHeight,
         };
     }

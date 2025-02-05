@@ -1,15 +1,44 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Para TextInputFormatter
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:path/path.dart' as p; // ✅ Evita conflito com `context`
+import 'package:path/path.dart' as p;
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_input_field.dart';
 import '../widgets/custom_multiline_input_field.dart';
 import '../widgets/date_picker_input.dart';
 import '../widgets/custom_button.dart';
+
+/// USDCurrencyInputFormatter
+/// Remove caracteres não numéricos, interpreta os dígitos como centavos e formata para exibir:
+/// Exemplo:
+/// - Digitar "9" => "$0.09"
+/// - Digitar "95" => "$0.95"
+/// - Digitar "955" => "$9.55"
+/// - Digitar "9557" => "$95.57"
+class USDCurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Remove tudo que não for dígito.
+    String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) {
+      digits = '0';
+    }
+    int value = int.parse(digits);
+    double dollars = value / 100.0;
+    String newText = "\$" + dollars.toStringAsFixed(2);
+    return TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+  }
+}
 
 class PreviewReceiptScreen extends StatefulWidget {
   const PreviewReceiptScreen({Key? key}) : super(key: key);
@@ -19,14 +48,15 @@ class PreviewReceiptScreen extends StatefulWidget {
 }
 
 class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
+  final TextEditingController _cardLast4Controller = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
-  bool _isUploading = false; // Controle de carregamento
+
+  bool _isUploading = false;
 
   @override
   Widget build(BuildContext context) {
-    // Obtém o caminho da imagem passada via argumentos
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String? imagePath = args?['imagePath'];
@@ -39,41 +69,72 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
           children: [
             const Center(child: TitleBox(title: "New Receipt")),
             const SizedBox(height: 20),
-
-            // 1️⃣ Campo de Data
+            // Campo Last 4 digits (apenas números, até 4 dígitos)
+            CustomInputField(
+              label: "Last 4 digits",
+              hintText: "Enter the last 4 digits of the card",
+              controller: _cardLast4Controller,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(4),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Campo Purchase date
             DatePickerInput(
-              label: "Date",
-              hintText: "Select receipt date",
+              label: "Purchase date",
+              hintText: "Select purchase date",
               controller: _dateController,
             ),
-
             const SizedBox(height: 16),
-
-            // 2️⃣ Campo de Valor
+            // Campo Amount com formatação de moeda americana.
             CustomInputField(
               label: "Amount",
-              hintText: "Enter receipt amount",
+              hintText: "\$0.00",
               controller: _amountController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                USDCurrencyInputFormatter(),
+              ],
             ),
-
             const SizedBox(height: 16),
-
-            // 3️⃣ Campo de Descrição
+            // Campo Description
             CustomMultilineInputField(
               label: "Description",
-              hintText: "Enter receipt details",
+              hintText: "Description of the purchase",
               controller: _descriptionController,
             ),
-
             const SizedBox(height: 20),
-
-            // Exibir imagem completa
+            // Botões (Cancel e Upload) acima da imagem
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                CustomButton(
+                  type: ButtonType.cancelButton,
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                ),
+                _isUploading
+                    ? const CircularProgressIndicator()
+                    : CustomButton(
+                        type: ButtonType.uploadReceiptButton,
+                        onPressed: () {
+                          _attemptUpload(imagePath);
+                        },
+                      ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Exibe a imagem capturada
             if (imagePath != null && imagePath.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Image.file(
                   File(imagePath),
-                  fit: BoxFit.contain, // Exibe imagem inteira
+                  fit: BoxFit.contain,
                   width: double.infinity,
                 ),
               )
@@ -82,37 +143,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
                 "No image captured.",
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-
-            const SizedBox(height: 20),
-
-            // Botões: Cancelar & Upload
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                CustomButton(
-                  type: ButtonType.cancelButton,
-                  onPressed: () {
-                    Navigator.pop(context); // Voltar
-                  },
-                ),
-                _isUploading
-                    ? const CircularProgressIndicator() // Mostra loading enquanto faz upload
-                    : CustomButton(
-                        type: ButtonType.uploadReceiptButton,
-                        onPressed: () {
-                          if (imagePath != null) {
-                            uploadReceipt(File(imagePath));
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text("No image to upload!")),
-                            );
-                          }
-                        },
-                      ),
-              ],
-            ),
-
             const SizedBox(height: 20),
           ],
         ),
@@ -120,42 +150,50 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
     );
   }
 
-  /// **Faz upload da imagem e dos dados para o Firebase**
+  /// Verifica se os campos obrigatórios foram preenchidos.
+  /// (Description é opcional)
+  void _attemptUpload(String? imagePath) {
+    if (_cardLast4Controller.text.trim().isEmpty ||
+        _dateController.text.trim().isEmpty ||
+        _amountController.text.trim().isEmpty ||
+        imagePath == null ||
+        imagePath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              "Last 4 digits, Purchase date, Amount, and Image are required."),
+        ),
+      );
+      return;
+    }
+    uploadReceipt(File(imagePath));
+  }
+
   Future<void> uploadReceipt(File imageFile) async {
     setState(() {
       _isUploading = true;
     });
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw "User not logged in.";
-
-      // Gera um nome de arquivo único
-      String fileName = p.basename(imageFile.path);
-      Reference storageRef =
+      final fileName = p.basename(imageFile.path);
+      final storageRef =
           FirebaseStorage.instance.ref().child("receipts/$fileName");
-
-      // Faz upload da imagem para o Firebase Storage
-      UploadTask uploadTask = storageRef.putFile(imageFile);
-      TaskSnapshot snapshot = await uploadTask;
-
-      // Obtém a URL da imagem após o upload
-      String imageUrl = await snapshot.ref.getDownloadURL();
-
-      // Salva os detalhes do recibo no Firestore com o userId do criador
+      final uploadTask = storageRef.putFile(imageFile);
+      final snapshot = await uploadTask;
+      final imageUrl = await snapshot.ref.getDownloadURL();
       await FirebaseFirestore.instance.collection("receipts").add({
-        "userId": user.uid, // ✅ Salva o ID do usuário logado
+        "userId": user.uid,
+        "cardLast4": _cardLast4Controller.text.trim(),
         "date": _dateController.text.trim(),
         "amount": _amountController.text.trim(),
         "description": _descriptionController.text.trim(),
         "imageUrl": imageUrl,
         "timestamp": FieldValue.serverTimestamp(),
       });
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Receipt uploaded successfully!")),
       );
-
       Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

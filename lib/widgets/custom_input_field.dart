@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class CustomInputField extends StatelessWidget {
   final String label;
@@ -7,6 +8,9 @@ class CustomInputField extends StatelessWidget {
   final bool error;
   final FocusNode? focusNode;
   final VoidCallback? onClearError;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? prefixText;
 
   const CustomInputField({
     Key? key,
@@ -16,20 +20,19 @@ class CustomInputField extends StatelessWidget {
     this.error = false,
     this.focusNode,
     this.onClearError,
+    this.keyboardType,
+    this.inputFormatters,
+    this.prefixText,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     const Color appBlueColor = Color(0xFF0205D3);
     const Color appYellowColor = Color(0xFFFFFDD0);
-
-    // Calcula a largura desejada (largura total - 20px)
     final double fieldWidth = MediaQuery.of(context).size.width - 20;
-
     return Container(
       width: fieldWidth < 0 ? 0 : fieldWidth,
       height: 40,
-      // Se error == true, adiciona um boxShadow vermelho claro
       decoration: error
           ? BoxDecoration(
               boxShadow: [
@@ -44,6 +47,8 @@ class CustomInputField extends StatelessWidget {
       child: TextField(
         controller: controller,
         focusNode: focusNode,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: const TextStyle(
           fontSize: 16,
           color: Colors.black,
@@ -71,6 +76,7 @@ class CustomInputField extends StatelessWidget {
             fontWeight: FontWeight.bold,
             color: Colors.grey,
           ),
+          prefixText: prefixText,
           filled: true,
           fillColor: appYellowColor,
           enabledBorder: const OutlineInputBorder(
@@ -82,7 +88,6 @@ class CustomInputField extends StatelessWidget {
           border: const OutlineInputBorder(
             borderSide: BorderSide(color: appBlueColor, width: 1),
           ),
-          // Mantém o espaço do erro para não quebrar o layout
           errorText: error ? ' ' : null,
           errorStyle: const TextStyle(fontSize: 0, height: 0),
           contentPadding: const EdgeInsets.symmetric(
