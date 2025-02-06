@@ -32,7 +32,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Timesheet App',
-      theme: ThemeData(fontFamily: 'Roboto'),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
       initialRoute: '/', // ✅ Usamos "/" para o AuthWrapper
       routes: {
         '/': (context) => const AuthWrapper(),
@@ -74,6 +76,20 @@ class AuthWrapper extends StatelessWidget {
         final user = snapshot.data;
         return user == null ? const LoginScreen() : const HomeScreen();
       },
+    );
+  }
+}
+
+class MyHomePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Timesheet App'),
+      ),
+      body: Center(
+        child: Text('Hello, world!'),
+      ),
     );
   }
 }
