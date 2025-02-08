@@ -1,3 +1,5 @@
+// lib/screens/receipts_screen.dart
+
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -99,7 +101,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   Widget build(BuildContext context) {
     return BaseLayout(
       title: "Time Sheet",
-      // Mantemos o padding horizontal de 10 aqui para o grid ficar a 10px
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Column(
@@ -150,21 +151,20 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     };
                   }).toList();
 
-                  // Se não for Admin, filtra
                   if (_userRole != "Admin") {
                     items = items.where((item) {
                       final map = item['data'] as Map<String, dynamic>;
                       return (map['userId'] ?? '') == _userId;
                     }).toList();
                   }
-                  // Filtro de Creator
+
                   if (_selectedCreator != "Creator") {
                     items = items.where((item) {
                       final cName = item['creatorName'] as String;
                       return cName == _selectedCreator;
                     }).toList();
                   }
-                  // Filtro de Card
+
                   if (_selectedCard != "Card") {
                     items = items.where((item) {
                       final map = item['data'] as Map<String, dynamic>;
@@ -172,7 +172,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                       return cardLabel == _selectedCard;
                     }).toList();
                   }
-                  // Filtro de Range
+
                   if (_selectedRange != null) {
                     final start = _selectedRange!.start;
                     final end = _selectedRange!.end;
@@ -185,7 +185,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     }).toList();
                   }
 
-                  // Ordena
                   items.sort((a, b) {
                     final dtA = a['parsedDate'] as DateTime?;
                     final dtB = b['parsedDate'] as DateTime?;
@@ -225,16 +224,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                         month = DateFormat('MMM').format(dt);
                       }
 
-                      // Ao clicar no Card, abrimos a ReceiptViewerScreen
-                      // passando docId e todos os dados do recibo
                       return GestureDetector(
                         onTap: () {
+                          // ABRE A RECEIPTVIEWERSCREEN AO CLICAR NO CARD
                           Navigator.pushNamed(
                             context,
                             '/receipt-viewer',
                             arguments: {
-                              'docId': docId,
-                              'receiptData': map, // todos os dados do recibo
+                              'imageUrl': imageUrl,
                             },
                           );
                         },
@@ -527,10 +524,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     child: DropdownButton<String>(
                       value: _selectedCreator,
                       style: const TextStyle(fontSize: 14, color: Colors.black),
-                      onChanged: (value) {
-                        if (value != null) {
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
                           setState(() {
-                            _selectedCreator = value;
+                            _selectedCreator = newValue;
                           });
                         }
                       },
@@ -563,10 +560,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     child: DropdownButton<String>(
                       value: _selectedCard,
                       style: const TextStyle(fontSize: 14, color: Colors.black),
-                      onChanged: (value) {
-                        if (value != null) {
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
                           setState(() {
-                            _selectedCard = value;
+                            _selectedCard = newValue;
                           });
                         }
                       },
@@ -699,8 +696,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         const SnackBar(content: Text("PDF generated successfully!")),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Error generating PDF: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error generating PDF: $e")),
+      );
     }
   }
 }

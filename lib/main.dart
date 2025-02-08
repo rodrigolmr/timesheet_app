@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-// Importação das telas
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/new_user_screen.dart';
@@ -15,7 +14,8 @@ import 'screens/settings_screen.dart';
 import 'screens/users_screen.dart';
 import 'screens/workers_screen.dart';
 import 'screens/receipts_screen.dart';
-import 'screens/preview_receipt_screen.dart'; // ✅ Importação da nova tela
+import 'screens/preview_receipt_screen.dart';
+import 'screens/receipt_viewer_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +23,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-/// O [MyApp] configura as rotas e usa [AuthWrapper] como tela inicial.
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -35,7 +34,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      initialRoute: '/', // ✅ Usamos "/" para o AuthWrapper
+      initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginScreen(),
@@ -50,14 +49,18 @@ class MyApp extends StatelessWidget {
         '/users': (context) => const UsersScreen(),
         '/workers': (context) => const WorkersScreen(),
         '/receipts': (context) => const ReceiptsScreen(),
-        '/preview-receipt': (context) =>
-            const PreviewReceiptScreen(), // ✅ Nova rota adicionada
+        '/preview-receipt': (context) => const PreviewReceiptScreen(),
+        '/receipt-viewer': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
+          final imageUrl = args?['imageUrl'] ?? '';
+          return ReceiptViewerScreen(imageUrl: imageUrl);
+        },
       },
     );
   }
 }
 
-/// O [AuthWrapper] verifica se o usuário está logado e redireciona.
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({Key? key}) : super(key: key);
 
@@ -71,8 +74,6 @@ class AuthWrapper extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
-        // Se não houver usuário, vai para a tela de login, senão vai para Home
         final user = snapshot.data;
         return user == null ? const LoginScreen() : const HomeScreen();
       },
@@ -81,13 +82,15 @@ class AuthWrapper extends StatelessWidget {
 }
 
 class MyHomePage extends StatelessWidget {
+  const MyHomePage({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Timesheet App'),
+        title: const Text('Timesheet App'),
       ),
-      body: Center(
+      body: const Center(
         child: Text('Hello, world!'),
       ),
     );
