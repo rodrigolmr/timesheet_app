@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '14.0'
+platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -32,6 +32,7 @@ target 'Runner' do
   use_modular_headers!
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
   target 'RunnerTests' do
     inherit! :search_paths
   end
@@ -40,5 +41,27 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # =============== permission_handler CONFIG ===============
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+
+        # Descomente (ou remova) as linhas conforme sua necessidade real:
+        'PERMISSION_CAMERA=1',            # Permissão de câmera
+        'PERMISSION_PHOTOS=1',            # Permissão de acesso a fotos
+        'PERMISSION_MICROPHONE=1',        # Permissão de microfone
+        'PERMISSION_LOCATION=1',          # Permissão de localização (genérica)
+        'PERMISSION_LOCATION_ALWAYS=1',   # Localização sempre
+        'PERMISSION_LOCATION_WHEN_IN_USE=1', # Localização enquanto em uso
+        'PERMISSION_MEDIA_LIBRARY=1',     # Acesso à biblioteca de mídia (iOS < 14)
+        'PERMISSION_SENSORS=1',          # Acesso a sensores de movimento
+        'PERMISSION_SPEECH_RECOGNIZER=1',# Reconhecimento de voz
+        'PERMISSION_BLUETOOTH=1',        # Acesso ao bluetooth (iOS 13+)
+        'PERMISSION_REMINDERS=1',        # Acesso aos lembretes
+        'PERMISSION_NOTIFICATIONS=1',    # Notificações push
+      ]
+    end
+    # =============== FIM permission_handler CONFIG ===============
   end
 end

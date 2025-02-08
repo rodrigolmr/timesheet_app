@@ -150,18 +150,21 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     };
                   }).toList();
 
+                  // Se não for Admin, filtra
                   if (_userRole != "Admin") {
                     items = items.where((item) {
                       final map = item['data'] as Map<String, dynamic>;
                       return (map['userId'] ?? '') == _userId;
                     }).toList();
                   }
+                  // Filtro de Creator
                   if (_selectedCreator != "Creator") {
                     items = items.where((item) {
                       final cName = item['creatorName'] as String;
                       return cName == _selectedCreator;
                     }).toList();
                   }
+                  // Filtro de Card
                   if (_selectedCard != "Card") {
                     items = items.where((item) {
                       final map = item['data'] as Map<String, dynamic>;
@@ -169,6 +172,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                       return cardLabel == _selectedCard;
                     }).toList();
                   }
+                  // Filtro de Range
                   if (_selectedRange != null) {
                     final start = _selectedRange!.start;
                     final end = _selectedRange!.end;
@@ -180,6 +184,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                           dt.isBefore(end.add(const Duration(days: 1)));
                     }).toList();
                   }
+
+                  // Ordena
                   items.sort((a, b) {
                     final dtA = a['parsedDate'] as DateTime?;
                     final dtB = b['parsedDate'] as DateTime?;
@@ -218,6 +224,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                         day = DateFormat('d').format(dt);
                         month = DateFormat('MMM').format(dt);
                       }
+
+                      // Ao clicar no Card, abrimos a ReceiptViewerScreen
+                      // passando docId e todos os dados do recibo
                       return GestureDetector(
                         onTap: () {
                           Navigator.pushNamed(
@@ -225,7 +234,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                             '/receipt-viewer',
                             arguments: {
                               'docId': docId,
-                              'imageUrl': imageUrl,
+                              'receiptData': map, // todos os dados do recibo
                             },
                           );
                         },
@@ -353,8 +362,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     );
   }
 
-  // Aqui alteramos para usar Padding com horizontal: 5,
-  // somado aos 10 do pai => total 15px para os botões (New e None).
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
