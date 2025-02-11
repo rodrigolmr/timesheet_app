@@ -1,5 +1,5 @@
 name: timesheet_app
-description: "A new Flutter project."
+description: "An app to manage the timesheets of Central Island Floors Inc."
 
 publish_to: 'none'
 version: 1.0.0+1
