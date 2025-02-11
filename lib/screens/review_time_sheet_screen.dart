@@ -1,7 +1,6 @@
-// lib/screens/review_time_sheet_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -20,14 +19,11 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
   final TextEditingController _noteController = TextEditingController();
 
   Future<void> _submitTimesheet(
-    TimesheetData timesheetData,
-    bool editMode,
-    String docId,
-  ) async {
+      TimesheetData timesheetData, bool editMode, String docId) async {
     try {
       final collection = FirebaseFirestore.instance.collection('timesheets');
+      final userId = FirebaseAuth.instance.currentUser!.uid;
       if (editMode && docId.isNotEmpty) {
-        // Update
         await collection.doc(docId).update({
           'jobName': timesheetData.jobName,
           'date': timesheetData.date,
@@ -39,10 +35,10 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'vehicle': timesheetData.vehicle,
           'notes': timesheetData.notes,
           'workers': timesheetData.workers,
+          'userId': userId,
           'timestamp': FieldValue.serverTimestamp(),
         });
       } else {
-        // Create new
         await collection.add({
           'jobName': timesheetData.jobName,
           'date': timesheetData.date,
@@ -54,16 +50,15 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'vehicle': timesheetData.vehicle,
           'notes': timesheetData.notes,
           'workers': timesheetData.workers,
+          'userId': userId,
           'timestamp': FieldValue.serverTimestamp(),
         });
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Timesheet salvo com sucesso!')),
-      );
+          const SnackBar(content: Text('Timesheet salvo com sucesso!')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erro ao enviar o timesheet: $e')),
-      );
+          SnackBar(content: Text('Erro ao enviar o timesheet: $e')));
     }
   }
 
@@ -85,15 +80,12 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           children: [
             const Center(child: TitleBox(title: "Review")),
             const SizedBox(height: 20),
-
-            // Botão BACK
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CustomButton(
                   type: ButtonType.backButton,
                   onPressed: () {
-                    // Volta para AddWorkersScreen, mas usando pushNamed
                     if (timesheetData != null) {
                       Navigator.pushNamed(
                         context,
@@ -112,12 +104,10 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
               ],
             ),
             const SizedBox(height: 20),
-
             if (timesheetData == null)
               const Text("No Timesheet Data found.")
             else
               _buildReviewLayout(timesheetData),
-
             if (timesheetData != null && timesheetData.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
@@ -151,10 +141,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                   ],
                 ),
               ),
-
             const SizedBox(height: 20),
-
-            // Botão para abrir/editar nota
             if (!_showNoteField)
               CustomMiniButton(
                 type: MiniButtonType.noteMiniButton,
@@ -230,10 +217,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                   ),
                 ],
               ),
-
             const SizedBox(height: 20),
-
-            // SUBMIT
             SizedBox(
               width: 330,
               child: Row(
@@ -244,7 +228,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                     onPressed: () async {
                       if (timesheetData != null) {
                         await _submitTimesheet(timesheetData, editMode, docId);
-                        // Depois de salvar, volta para Home
                         Navigator.pushNamedAndRemoveUntil(
                           context,
                           '/home',
@@ -580,7 +563,6 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
         ),
     ];
 
-    // Adiciona 4 linhas vazias
     for (int i = 0; i < 4; i++) {
       rows.add(
         TableRow(

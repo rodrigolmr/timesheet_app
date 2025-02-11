@@ -1,9 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
-
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -20,52 +20,90 @@ class TimesheetsScreen extends StatefulWidget {
 
 class _TimesheetsScreenState extends State<TimesheetsScreen> {
   bool _showFilters = false;
-
-  /// Variáveis para edição dos filtros (usadas na UI do container)
   DateTimeRange? _selectedRange;
   String _selectedCreator = "Creator";
-
-  /// Variáveis "aplicadas" que serão usadas para filtrar os itens
   DateTimeRange? _appliedRange;
   String _appliedCreator = "Creator";
-
-  /// Indica se a ordenação é decrescente (default) ou não
   bool _isDescending = true;
-
-  /// Map de timesheets selecionados para gerar PDF
   final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
 
-  /// Lista que armazenará os itens filtrados (para uso no "Select All")
   List<Map<String, dynamic>> _currentItems = [];
-
-  /// Lista de nomes de “criadores” (Foreman) (com “Creator” como placeholder)
   List<String> _creatorList = ["Creator"];
+  Map<String, String> _usersMap = {};
+
+  // Variáveis para guardar userId e role
+  String? _userId;
+  String? _userRole;
+  bool _isLoadingUser = true;
 
   @override
   void initState() {
     super.initState();
-    _loadCreators();
+    _loadUserInfo();
   }
 
-  /// Carrega os nomes (Foreman) da coleção "users"
+  // 1) Carrega dados do usuário atual do Auth
+  //   depois pega a role lá na coleção "users".
+  Future<void> _loadUserInfo() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        // Se não houver usuário, navegue para Login, por exemplo.
+        Navigator.pushReplacementNamed(context, '/login');
+        return;
+      }
+      _userId = user.uid;
+
+      // Agora pega o doc do 'users' pra ler a role
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        _userRole = data['role'] ?? 'User';
+      } else {
+        // Se não existe, assume User, mas em geral convém tratar.
+        _userRole = 'User';
+      }
+
+      // 2) Carrega a lista de criadores (para o dropdown) => só depois do role
+      await _loadCreators();
+
+      // Tudo carregado
+      setState(() {
+        _isLoadingUser = false;
+      });
+    } catch (e) {
+      debugPrint("Error loading user info: $e");
+      // Opcional: setar flags, exibir erro etc.
+      setState(() {
+        _isLoadingUser = false;
+      });
+    }
+  }
+
+  // Carrega todos os usuários para montar a _usersMap e _creatorList
   Future<void> _loadCreators() async {
     try {
       final snapshot =
           await FirebaseFirestore.instance.collection('users').get();
       final List<String> loaded = [];
+      final Map<String, String> usersMap = {};
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final firstName = data["firstName"] ?? "";
         final lastName = data["lastName"] ?? "";
         final fullName = (firstName + " " + lastName).trim();
+        usersMap[doc.id] = fullName;
         if (fullName.isNotEmpty) {
           loaded.add(fullName);
         }
       }
       loaded.sort();
-      setState(() {
-        _creatorList = ["Creator", ...loaded];
-      });
+      _creatorList = ["Creator", ...loaded];
+      _usersMap = usersMap;
     } catch (e) {
       debugPrint("Error loading creators: $e");
     }
@@ -73,6 +111,13 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Se ainda não carregou a role do user, mostra spinner
+    if (_isLoadingUser) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return BaseLayout(
       title: "Time Sheet",
       child: Column(
@@ -85,147 +130,149 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             const SizedBox(height: 20),
             _buildFilterContainer(context),
           ],
-          // Exibe a lista de timesheets (filtrada e ordenada em memória)
+          // 3) Mostra a lista filtrada ou do userId ou de todos
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('timesheets')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text("Error loading data: ${snapshot.error}"),
-                  );
-                }
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final data = snapshot.data;
-                if (data == null || data.docs.isEmpty) {
-                  return const Center(child: Text("No timesheets found."));
-                }
-
-                // Converter docs para uma lista manipulável com declaração explícita de tipo
-                final List<Map<String, dynamic>> items = data.docs.map((doc) {
-                  final Map<String, dynamic> mapData =
-                      doc.data() as Map<String, dynamic>;
-                  final String docId = doc.id;
-                  final rawDateString = mapData['date'] ?? '';
-                  DateTime? parsedDate;
-                  try {
-                    parsedDate =
-                        DateFormat("M/d/yy, EEEE").parse(rawDateString);
-                  } catch (_) {
-                    parsedDate = null;
-                  }
-                  return {
-                    'docId': docId,
-                    'data': mapData,
-                    'parsedDate': parsedDate,
-                  };
-                }).toList();
-
-                // Filtro por "Foreman" usando os filtros aplicados
-                if (_appliedCreator != "Creator") {
-                  items.retainWhere((item) {
-                    final Map<String, dynamic> mapData =
-                        item['data'] as Map<String, dynamic>;
-                    final foreman = mapData['foreman'] ?? '';
-                    return foreman == _appliedCreator;
-                  });
-                }
-
-                // Filtro por data usando _appliedRange
-                if (_appliedRange != null) {
-                  final start = _appliedRange!.start;
-                  final end = _appliedRange!.end;
-                  items.retainWhere((item) {
-                    final DateTime? dt = item['parsedDate'] as DateTime?;
-                    if (dt == null) return false;
-                    return dt
-                            .isAfter(start.subtract(const Duration(days: 1))) &&
-                        dt.isBefore(end.add(const Duration(days: 1)));
-                  });
-                }
-
-                // Ordena (asc/desc) pelo parsedDate
-                items.sort((a, b) {
-                  final DateTime? dtA = a['parsedDate'] as DateTime?;
-                  final DateTime? dtB = b['parsedDate'] as DateTime?;
-                  if (dtA == null && dtB == null) return 0;
-                  if (dtA == null) return _isDescending ? 1 : -1;
-                  if (dtB == null) return _isDescending ? -1 : 1;
-                  final cmp = dtA.compareTo(dtB);
-                  return _isDescending ? -cmp : cmp;
-                });
-
-                // Armazena essa lista filtrada para uso no "Select All"
-                _currentItems = items;
-
-                return ListView.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final Map<String, dynamic> item = items[index];
-                    final String docId = item['docId'] as String;
-                    final Map<String, dynamic> mapData =
-                        item['data'] as Map<String, dynamic>;
-                    final String foreman = mapData['foreman'] ?? '';
-                    final String jobName = mapData['jobName'] ?? '';
-
-                    // Converte a data para obter dia e mês
-                    String day = '--';
-                    String month = '--';
-                    final DateTime? dtParsed = item['parsedDate'] as DateTime?;
-                    if (dtParsed != null) {
-                      day = DateFormat('d').format(dtParsed);
-                      month = DateFormat('MMM').format(dtParsed);
-                    }
-
-                    final bool isChecked =
-                        _selectedTimesheets.containsKey(docId);
-
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/timesheet-view',
-                          arguments: {'docId': docId},
-                        );
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 5),
-                        child: TimeSheetRowItem(
-                          day: day,
-                          month: month,
-                          jobName: jobName,
-                          userName: foreman.isNotEmpty ? foreman : "User",
-                          initialChecked: isChecked,
-                          onCheckChanged: (checked) {
-                            setState(() {
-                              if (checked) {
-                                _selectedTimesheets[docId] = mapData;
-                              } else {
-                                _selectedTimesheets.remove(docId);
-                              }
-                            });
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+            child: _buildTimesheetList(),
           ),
         ],
       ),
     );
   }
 
-  /// Barra superior com os botões New e PDF à esquerda e, à direita, uma coluna com:
-  /// - Na primeira linha: os mini botões (Sort, ALL e NONE)
-  /// - Na segunda linha: o texto "Selected: X"
-  /// A barra toda fica a 15px da lateral do dispositivo.
+  // 4) Constrói o StreamBuilder usando where(...) caso seja user
+  Widget _buildTimesheetList() {
+    // Se role == Admin, mostra todos; se == User, mostra só do userId
+    final CollectionReference timesheetsRef =
+        FirebaseFirestore.instance.collection('timesheets');
+
+    final Stream<QuerySnapshot> stream = (_userRole == "Admin")
+        ? timesheetsRef.snapshots()
+        : timesheetsRef.where('userId', isEqualTo: _userId).snapshots();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: stream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text("Error loading data: ${snapshot.error}"),
+          );
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final data = snapshot.data;
+        if (data == null || data.docs.isEmpty) {
+          return const Center(child: Text("No timesheets found."));
+        }
+
+        final List<Map<String, dynamic>> items = data.docs.map((doc) {
+          final Map<String, dynamic> mapData =
+              doc.data() as Map<String, dynamic>;
+          final String docId = doc.id;
+          final rawDateString = mapData['date'] ?? '';
+          DateTime? parsedDate;
+          try {
+            parsedDate = DateFormat("M/d/yy, EEEE").parse(rawDateString);
+          } catch (_) {
+            parsedDate = null;
+          }
+          return {
+            'docId': docId,
+            'data': mapData,
+            'parsedDate': parsedDate,
+          };
+        }).toList();
+
+        // Filtros do "Creator"
+        if (_appliedCreator != "Creator" && _usersMap.isNotEmpty) {
+          items.retainWhere((item) {
+            final Map<String, dynamic> mapData =
+                item['data'] as Map<String, dynamic>;
+            final String userId = mapData['userId'] ?? '';
+            final fullName = _usersMap[userId] ?? "";
+            return fullName == _appliedCreator;
+          });
+        }
+
+        // Filtro por data
+        if (_appliedRange != null) {
+          final start = _appliedRange!.start;
+          final end = _appliedRange!.end;
+          items.retainWhere((item) {
+            final DateTime? dt = item['parsedDate'] as DateTime?;
+            if (dt == null) return false;
+            return dt.isAfter(start.subtract(const Duration(days: 1))) &&
+                dt.isBefore(end.add(const Duration(days: 1)));
+          });
+        }
+
+        // Ordena asc/desc
+        items.sort((a, b) {
+          final DateTime? dtA = a['parsedDate'] as DateTime?;
+          final DateTime? dtB = b['parsedDate'] as DateTime?;
+          if (dtA == null && dtB == null) return 0;
+          if (dtA == null) return _isDescending ? 1 : -1;
+          if (dtB == null) return _isDescending ? -1 : 1;
+          final cmp = dtA.compareTo(dtB);
+          return _isDescending ? -cmp : cmp;
+        });
+
+        _currentItems = items;
+
+        return ListView.builder(
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final Map<String, dynamic> item = items[index];
+            final String docId = item['docId'] as String;
+            final Map<String, dynamic> mapData =
+                item['data'] as Map<String, dynamic>;
+            final String userId = mapData['userId'] ?? '';
+            final String userName = _usersMap[userId] ?? "User";
+            final String jobName = mapData['jobName'] ?? '';
+            String day = '--';
+            String month = '--';
+            final DateTime? dtParsed = item['parsedDate'] as DateTime?;
+            if (dtParsed != null) {
+              day = DateFormat('d').format(dtParsed);
+              month = DateFormat('MMM').format(dtParsed);
+            }
+            final bool isChecked = _selectedTimesheets.containsKey(docId);
+
+            return GestureDetector(
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/timesheet-view',
+                  arguments: {'docId': docId},
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: TimeSheetRowItem(
+                  day: day,
+                  month: month,
+                  jobName: jobName,
+                  userName: userName,
+                  initialChecked: isChecked,
+                  onCheckChanged: (checked) {
+                    setState(() {
+                      if (checked) {
+                        _selectedTimesheets[docId] = mapData;
+                      } else {
+                        _selectedTimesheets.remove(docId);
+                      }
+                    });
+                  },
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Barra superior
   Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -234,7 +281,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Lado esquerdo: Botões New e PDF
             Row(
               children: [
                 CustomButton(
@@ -250,7 +296,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 ),
               ],
             ),
-            // Lado direito: Coluna com mini botões e contagem
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -290,7 +335,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     );
   }
 
-  /// Container do filtro (mantido inalterado)
+  // Container de filtros (Range e Creator)
   Widget _buildFilterContainer(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -299,17 +344,12 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         color: const Color(0xFFF0F0FF),
         borderRadius: BorderRadius.circular(10),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          )
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
         ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Linha 1: Range / datas / asc / desc
           Row(
             children: [
               ElevatedButton(
@@ -330,17 +370,13 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                       ? const Text(
                           "No date range",
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 15, fontWeight: FontWeight.bold),
                           maxLines: 1,
                         )
                       : Text(
                           "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 15, fontWeight: FontWeight.bold),
                           maxLines: 1,
                         ),
                 ),
@@ -360,16 +396,12 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          // Linha 2: Dropdown Creator
           Container(
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               color: Colors.white,
-              border: Border.all(
-                color: const Color(0xFF0205D3),
-                width: 2,
-              ),
+              border: Border.all(color: const Color(0xFF0205D3), width: 2),
               borderRadius: BorderRadius.circular(4),
             ),
             child: DropdownButtonHideUnderline(
@@ -393,7 +425,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          // Linha 3: [Clear], [Apply], [Close]
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -412,7 +443,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
                 type: MiniButtonType.applyMiniButton,
                 onPressed: () {
                   setState(() {
-                    // Ao pressionar "Apply", os filtros editados são aplicados
                     _appliedRange = _selectedRange;
                     _appliedCreator = _selectedCreator;
                     _showFilters = false;
@@ -434,7 +464,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     );
   }
 
-  /// Botão quadrado 40x40 com apenas a seta
   Widget _buildSquareArrowButton({
     required IconData icon,
     required bool isActive,
@@ -449,16 +478,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
           color: isActive ? const Color(0xFF0205D3) : Colors.grey,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
   }
 
-  /// Abre o DateRangePicker
   Future<void> _pickDateRange(BuildContext context) async {
     final now = DateTime.now();
     final selected = await showDateRangePicker(
@@ -478,12 +502,10 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     }
   }
 
-  /// Gera PDF a partir dos timesheets selecionados
   Future<void> _generatePdf() async {
     if (_selectedTimesheets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No timesheet selected.")),
-      );
+          const SnackBar(content: Text("No timesheet selected.")));
       return;
     }
     try {
@@ -498,7 +520,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     }
   }
 
-  /// Seleciona todos os items atualmente listados
   void _handleSelectAll() {
     setState(() {
       for (var item in _currentItems) {
@@ -509,7 +530,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     });
   }
 
-  /// Remove a seleção de todos
   void _handleDeselectAll() {
     setState(() {
       _selectedTimesheets.clear();

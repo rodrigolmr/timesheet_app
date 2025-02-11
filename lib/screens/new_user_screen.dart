@@ -19,8 +19,7 @@ class _NewUserScreenState extends State<NewUserScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-
-  String _selectedRole = 'User'; // Default role
+  String _selectedRole = 'User';
   bool _isLoading = false;
   String _errorMessage = '';
 
@@ -29,8 +28,6 @@ class _NewUserScreenState extends State<NewUserScreen> {
       _isLoading = true;
       _errorMessage = '';
     });
-
-    // Verifica se senhas conferem
     if (_passwordController.text.trim() !=
         _confirmPasswordController.text.trim()) {
       setState(() {
@@ -39,25 +36,23 @@ class _NewUserScreenState extends State<NewUserScreen> {
       });
       return;
     }
-
     try {
       final userCredential =
           await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
           .set({
+        'userId': userCredential.user!.uid,
         'firstName': _firstNameController.text.trim(),
         'lastName': _lastNameController.text.trim(),
         'email': _emailController.text.trim(),
         'role': _selectedRole,
         'createdAt': FieldValue.serverTimestamp(),
       });
-
       Navigator.pushReplacementNamed(context, '/login');
     } on FirebaseAuthException catch (e) {
       setState(() {
@@ -91,7 +86,6 @@ class _NewUserScreenState extends State<NewUserScreen> {
   Widget build(BuildContext context) {
     const Color appBlueColor = Color(0xFF0205D3);
     const Color appYellowColor = Color(0xFFFFFDD0);
-
     return BaseLayout(
       title: "Time Sheet",
       child: SingleChildScrollView(
@@ -100,48 +94,36 @@ class _NewUserScreenState extends State<NewUserScreen> {
           children: [
             const TitleBox(title: "New User"),
             const SizedBox(height: 20),
-
-            // Nome
             CustomInputField(
               label: "First name",
               hintText: "Enter your first name",
               controller: _firstNameController,
             ),
             const SizedBox(height: 16),
-
-            // Sobrenome
             CustomInputField(
               label: "Last name",
               hintText: "Enter your last name",
               controller: _lastNameController,
             ),
             const SizedBox(height: 16),
-
-            // Email
             CustomInputField(
               label: "Email",
               hintText: "Enter your email",
               controller: _emailController,
             ),
             const SizedBox(height: 16),
-
-            // Senha
             CustomInputField(
               label: "Password",
               hintText: "Enter your password",
               controller: _passwordController,
             ),
             const SizedBox(height: 16),
-
-            // Confirmar senha
             CustomInputField(
               label: "Confirm password",
               hintText: "Re-enter your password",
               controller: _confirmPasswordController,
             ),
             const SizedBox(height: 16),
-
-            // Dropdown para Role no mesmo estilo
             SizedBox(
               width: 100,
               height: 40,
@@ -151,10 +133,7 @@ class _NewUserScreenState extends State<NewUserScreen> {
                     .map<DropdownMenuItem<String>>((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
-                    child: Text(
-                      value,
-                      style: const TextStyle(fontSize: 16),
-                    ),
+                    child: Text(value, style: const TextStyle(fontSize: 16)),
                   );
                 }).toList(),
                 onChanged: (String? newValue) {
@@ -165,54 +144,36 @@ class _NewUserScreenState extends State<NewUserScreen> {
                 decoration: InputDecoration(
                   labelText: 'Role',
                   labelStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: Colors.black,
-                  ),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.black),
                   floatingLabelStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: appBlueColor,
-                  ),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: appBlueColor),
                   hintText: 'Select',
                   hintStyle: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-
-                  // Fundo amarelo
+                      fontWeight: FontWeight.bold, color: Colors.grey),
                   filled: true,
                   fillColor: appYellowColor,
-
-                  // Borda azul de 1px antes de focar
                   enabledBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: appBlueColor, width: 1),
-                  ),
-                  // Borda azul de 2px ao focar
+                      borderSide: BorderSide(color: appBlueColor, width: 1)),
                   focusedBorder: const OutlineInputBorder(
-                    borderSide: BorderSide(color: appBlueColor, width: 2),
-                  ),
-                  // Fallback
+                      borderSide: BorderSide(color: appBlueColor, width: 2)),
                   border: const OutlineInputBorder(
-                    borderSide: BorderSide(color: appBlueColor, width: 1),
-                  ),
-
+                      borderSide: BorderSide(color: appBlueColor, width: 1)),
                   contentPadding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 ),
               ),
             ),
             const SizedBox(height: 20),
-
             if (_errorMessage.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  _errorMessage,
-                  style: const TextStyle(color: Colors.red, fontSize: 14),
-                ),
+                child: Text(_errorMessage,
+                    style: const TextStyle(color: Colors.red, fontSize: 14)),
               ),
-
             _isLoading
                 ? const CircularProgressIndicator()
                 : CustomButton(

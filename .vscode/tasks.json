@@ -1,0 +1,15 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Commit and Push to GitHub",
+        "type": "shell",
+        "command": "git add . && git commit -m \"Atualizações\" && git push origin main",
+        "group": {
+          "kind": "build",
+          "isDefault": true
+        },
+        "problemMatcher": []
+      }
+    ]
+  }
