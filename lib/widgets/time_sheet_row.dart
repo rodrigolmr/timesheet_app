@@ -51,7 +51,7 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                   color: const Color(0xFFFFFFD0), // Fundo amarelo claro
                   border: Border.all(
                     color: const Color(0xFF0205D3), // Azul
-                    width: 2,
+                    width: 1,
                   ),
                   borderRadius: BorderRadius.circular(5),
                 ),
