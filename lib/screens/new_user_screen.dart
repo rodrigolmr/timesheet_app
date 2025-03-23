@@ -87,7 +87,7 @@ class _NewUserScreenState extends State<NewUserScreen> {
     const Color appBlueColor = Color(0xFF0205D3);
     const Color appYellowColor = Color(0xFFFFFDD0);
     return BaseLayout(
-      title: "Time Sheet",
+      title: "Timesheet",
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Column(

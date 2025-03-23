@@ -16,7 +16,7 @@ class ReceiptViewerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BaseLayout(
-      title: "Time Sheet", // ✅ Floating Header sempre "Time Sheet"
+      title: "Timesheet", // ✅ Floating Header sempre "Time Sheet"
       child: Column(
         children: [
           const SizedBox(height: 16),

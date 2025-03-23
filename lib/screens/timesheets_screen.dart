@@ -119,7 +119,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     }
 
     return BaseLayout(
-      title: "Time Sheet",
+      title: "Timesheet",
       child: Column(
         children: [
           const SizedBox(height: 16),

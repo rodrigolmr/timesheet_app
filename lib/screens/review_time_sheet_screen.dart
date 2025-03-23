@@ -72,7 +72,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
         args != null ? (args['timesheetData'] as TimesheetData?) : null;
 
     return BaseLayout(
-      title: "Time Sheet",
+      title: "Timesheet",
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Column(

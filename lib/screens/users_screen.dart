@@ -10,7 +10,7 @@ class UsersScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BaseLayout(
-      title: "Time Sheet",
+      title: "Timesheet",
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Column(

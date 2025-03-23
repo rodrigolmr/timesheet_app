@@ -19,7 +19,7 @@ class TimesheetViewScreen extends StatelessWidget {
         args != null && args.containsKey('docId') ? args['docId'] : '';
 
     return BaseLayout(
-      title: "Time Sheet",
+      title: "Timesheet",
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Column(
