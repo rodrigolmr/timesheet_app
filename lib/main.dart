@@ -17,6 +17,9 @@ import 'screens/receipts_screen.dart';
 import 'screens/preview_receipt_screen.dart';
 import 'screens/receipt_viewer_screen.dart';
 
+// IMPORTANDO A NOVA TELA
+import 'screens/cards_screen.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -56,6 +59,9 @@ class MyApp extends StatelessWidget {
           final imageUrl = args?['imageUrl'] ?? '';
           return ReceiptViewerScreen(imageUrl: imageUrl);
         },
+
+        // ROTA PARA CARDS
+        '/cards': (context) => const CardsScreen(),
       },
     );
   }

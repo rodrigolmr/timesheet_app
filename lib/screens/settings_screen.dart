@@ -84,24 +84,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : _buildUserInfoBox(),
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CustomButton(
-                  type: ButtonType.usersButton,
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/users');
-                  },
-                ),
-                const SizedBox(width: 20),
-                CustomButton(
-                  type: ButtonType.workersButton,
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/workers');
-                  },
-                ),
-              ],
-            ),
+
+            // Exibe a Row apenas se for Admin:
+            if (_role == "Admin")
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CustomButton(
+                    type: ButtonType.usersButton,
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/users');
+                    },
+                  ),
+                  const SizedBox(width: 20),
+                  CustomButton(
+                    type: ButtonType.workersButton,
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/workers');
+                    },
+                  ),
+                  const SizedBox(width: 20),
+                  // Novo botão "Cards"
+                  CustomButton(
+                    type: ButtonType.cardsButton,
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/cards');
+                    },
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -141,7 +152,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            _role, // <- apenas "Admin" ou "User"
+            _role, // "Admin" ou "User"
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,

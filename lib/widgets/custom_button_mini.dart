@@ -93,7 +93,7 @@ class CustomMiniButton extends StatelessWidget {
         };
       case MiniButtonType.deleteMiniButton:
         return {
-          'label': 'Del',
+          'label': 'Delete',
           'backgroundColor': const Color(0xFFFF0000),
           'borderColor': const Color(0xFFFF0000),
           'textColor': Colors.white,

@@ -6,13 +6,13 @@ import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
 import '../models/timesheet_data.dart';
+import '../widgets/custom_button_mini.dart'; // Import onde está CustomMiniButton
 
 class TimesheetViewScreen extends StatelessWidget {
   const TimesheetViewScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Recebe o docId (e possivelmente outros dados) via arguments
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String docId =
@@ -25,20 +25,17 @@ class TimesheetViewScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Título principal
-            const Center(
-              child: TitleBox(title: "Timesheet"),
-            ),
+            const Center(child: TitleBox(title: "Timesheet")),
             const SizedBox(height: 20),
 
-            // Row com Back e Edit buttons
+            // Row com Back e Edit
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CustomButton(
                   type: ButtonType.backButton,
                   onPressed: () {
-                    Navigator.pop(context); // Volta para a tela anterior
+                    Navigator.pop(context);
                   },
                 ),
                 const SizedBox(width: 20),
@@ -52,11 +49,10 @@ class TimesheetViewScreen extends StatelessWidget {
                         arguments: {'editMode': true, 'docId': docId},
                       );
                     } else {
-                      // Exibe mensagem de erro
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content:
-                                Text('ID do timesheet inválido para edição.')),
+                          content: Text('Invalid ID for editing.'),
+                        ),
                       );
                     }
                   },
@@ -65,11 +61,11 @@ class TimesheetViewScreen extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Se não tiver docId, exibimos uma mensagem de erro
+            // Se docId for vazio, mostra erro
             if (docId.isEmpty)
-              const Text("Documento não encontrado ou ID vazio.")
+              const Text("Timesheet not found or empty ID.")
             else
-              // Carrega dados do Firestore via StreamBuilder
+              // StreamBuilder p/ carregar o doc
               StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('timesheets')
@@ -77,21 +73,16 @@ class TimesheetViewScreen extends StatelessWidget {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
-                    return Text('Erro ao carregar: ${snapshot.error}');
+                    return Text('Error loading: ${snapshot.error}');
                   }
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-
-                  // Se o doc não existir ou estiver sem dados
                   if (!snapshot.hasData || !snapshot.data!.exists) {
-                    return const Text(
-                        "Este timesheet não foi encontrado no Firestore.");
+                    return const Text("This timesheet was not found.");
                   }
 
-                  // DocumentSnapshot
                   final doc = snapshot.data!;
-
                   final jobName = doc.get('jobName') ?? '';
                   final date = doc.get('date') ?? '';
                   final tm = doc.get('tm') ?? '';
@@ -102,13 +93,9 @@ class TimesheetViewScreen extends StatelessWidget {
                   final vehicle = doc.get('vehicle') ?? '';
                   final notes = doc.get('notes') ?? '';
 
-                  // "workers" é salvo como List de Map<String, dynamic> no Firestore,
-                  // mas precisamos convertê-lo corretamente para List<Map<String, String>>.
                   final List<dynamic> workersRaw = doc.get('workers') ?? [];
                   final List<Map<String, String>> workers =
                       workersRaw.map((item) {
-                    // Aqui convertemos 'item' para Map<String,dynamic>, depois
-                    // montamos Map<String,String> usando toString() para evitar erro.
                     final mapItem = item as Map<String, dynamic>;
                     return {
                       'name': mapItem['name']?.toString() ?? '',
@@ -120,7 +107,6 @@ class TimesheetViewScreen extends StatelessWidget {
                     };
                   }).toList();
 
-                  // Monta objeto TimesheetData (opcionalmente)
                   final timesheetData = TimesheetData(
                     jobName: jobName,
                     date: date,
@@ -134,8 +120,18 @@ class TimesheetViewScreen extends StatelessWidget {
                     workers: workers,
                   );
 
-                  // Constrói o layout (mesmo estilo de Review)
-                  return _buildReviewLayout(timesheetData);
+                  return Column(
+                    children: [
+                      // Layout do timesheet
+                      _buildReviewLayout(timesheetData),
+                      const SizedBox(height: 20),
+                      // MiniButton de Delete
+                      CustomMiniButton(
+                        type: MiniButtonType.deleteMiniButton,
+                        onPressed: () => _confirmDelete(context, docId),
+                      ),
+                    ],
+                  );
                 },
               ),
           ],
@@ -144,12 +140,60 @@ class TimesheetViewScreen extends StatelessWidget {
     );
   }
 
-  /// Copiando o layout de "Review" para exibir os dados do timesheet
+  /// Método que mostra um AlertDialog de confirmação
+  void _confirmDelete(BuildContext context, String docId) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("Delete Timesheet"),
+          content: const Text(
+            "Are you sure you want to delete this timesheet? This action cannot be undone.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx), // Fecha apenas o dialog
+              child: const Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx); // Fecha o dialog
+                _deleteTimesheet(context, docId);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text("Delete"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Deleta o registro do Firestore
+  Future<void> _deleteTimesheet(BuildContext context, String docId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('timesheets')
+          .doc(docId)
+          .delete();
+
+      // Mostra mensagem de sucesso e volta para a tela anterior
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Timesheet deleted successfully.")),
+      );
+      Navigator.pop(context); // Sai desta tela (TimesheetViewScreen)
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error deleting timesheet: $e")),
+      );
+    }
+  }
+
+  // --- Layout de exibição do timesheet (igual ao "Review") ---
   Widget _buildReviewLayout(TimesheetData data) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Container principal
         Container(
           width: 292,
           decoration: BoxDecoration(
@@ -179,8 +223,6 @@ class TimesheetViewScreen extends StatelessWidget {
             ],
           ),
         ),
-
-        // Se houver nota, exibe fora do container
         if (data.notes.isNotEmpty) ...[
           const SizedBox(height: 8),
           Row(
@@ -193,18 +235,12 @@ class TimesheetViewScreen extends StatelessWidget {
                   children: [
                     const Text(
                       "Note: ",
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.normal,
-                      ),
+                      style: TextStyle(fontSize: 11),
                     ),
                     Expanded(
                       child: Text(
                         data.notes,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.normal,
-                        ),
+                        style: const TextStyle(fontSize: 11),
                       ),
                     ),
                   ],
@@ -216,8 +252,6 @@ class TimesheetViewScreen extends StatelessWidget {
       ],
     );
   }
-
-  // ============== Métodos Auxiliares p/ Layout ===============
 
   Widget _buildTitleTimeSheet(String text) {
     return Container(
@@ -473,10 +507,8 @@ class TimesheetViewScreen extends StatelessWidget {
     );
   }
 
-  // Exibe tabela com workers
   Widget _buildWorkersTable(List<Map<String, String>> workers) {
     final rows = <TableRow>[
-      // Cabeçalho
       TableRow(
         decoration: const BoxDecoration(color: Color(0xFFEFEFEF)),
         children: [
@@ -488,7 +520,6 @@ class TimesheetViewScreen extends StatelessWidget {
           _buildHeaderCell("MEAL", fontSize: 8, textAlign: TextAlign.center),
         ],
       ),
-      // Dados
       for (final w in workers)
         TableRow(
           children: [

@@ -19,6 +19,9 @@ enum ButtonType {
   usersButton,
   workersButton,
   uploadReceiptButton,
+
+  // Novo tipo para navegar até a tela de Cartões
+  cardsButton,
 }
 
 class CustomButton extends StatelessWidget {
@@ -49,6 +52,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.sheetsButton:
         return {
           'label': 'Sheets',
@@ -65,6 +69,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.receiptsButton:
         return {
           'label': 'Receipts',
@@ -81,6 +86,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.settingsButton:
         return {
           'label': 'Settings',
@@ -97,6 +103,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.cancelButton:
         return {
           'label': 'Cancel',
@@ -113,6 +120,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.clearButton:
         return {
           'label': 'Clear',
@@ -129,6 +137,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.nextButton:
         return {
           'label': 'Next',
@@ -145,6 +154,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.backButton:
         return {
           'label': 'Back',
@@ -161,6 +171,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.addWorkerButton:
         return {
           'label': 'Add',
@@ -177,6 +188,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.submitButton:
         return {
           'label': 'Submit',
@@ -193,6 +205,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.editButton:
         return {
           'label': 'Edit',
@@ -209,6 +222,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.pdfButton:
         return {
           'label': 'PDF',
@@ -225,6 +239,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.addUserButton:
         return {
           'label': 'Add user',
@@ -241,6 +256,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.loginButton:
         return {
           'label': 'Login',
@@ -257,6 +273,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.usersButton:
         return {
           'label': 'Users',
@@ -273,6 +290,7 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.workersButton:
         return {
           'label': 'Workers',
@@ -289,12 +307,31 @@ class CustomButton extends StatelessWidget {
           'iconSpacing': 4.0,
           'hasIcon': true,
         };
+
       case ButtonType.uploadReceiptButton:
         return {
           'label': 'Upload',
           'faIcon': FontAwesomeIcons.cloudUploadAlt,
           'backgroundColor': const Color(0xFF0277BD),
           'borderColor': const Color(0xFF0277BD),
+          'iconColor': Colors.white,
+          'textColor': Colors.white,
+          'height': 60.0,
+          'width': 60.0,
+          'iconSize': 24.0,
+          'textSize': 12.0,
+          'lineHeight': 1.0,
+          'iconSpacing': 4.0,
+          'hasIcon': true,
+        };
+
+      // <<-- BOTÃO NOVO AQUI (cardsButton) -->
+      case ButtonType.cardsButton:
+        return {
+          'label': 'Cards',
+          'faIcon': FontAwesomeIcons.creditCard,
+          'backgroundColor': const Color(0xFFD81B60), // cor de fundo (pink)
+          'borderColor': const Color(0xFFD81B60), // borda da mesma cor
           'iconColor': Colors.white,
           'textColor': Colors.white,
           'height': 60.0,
