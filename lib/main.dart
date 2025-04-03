@@ -1,6 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -16,9 +19,8 @@ import 'screens/workers_screen.dart';
 import 'screens/receipts_screen.dart';
 import 'screens/preview_receipt_screen.dart';
 import 'screens/receipt_viewer_screen.dart';
-
-// IMPORTANDO A NOVA TELA
 import 'screens/cards_screen.dart';
+import 'services/update_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +28,10 @@ void main() async {
   runApp(const MyApp());
 }
 
+///
+/// A MyApp não faz mais a checagem de versão no initState.
+/// Em vez disso, deixamos ela apenas definir as rotas.
+///
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -34,9 +40,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Timesheet App',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-      ),
+      theme: ThemeData(primarySwatch: Colors.blue),
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
@@ -59,37 +63,130 @@ class MyApp extends StatelessWidget {
           final imageUrl = args?['imageUrl'] ?? '';
           return ReceiptViewerScreen(imageUrl: imageUrl);
         },
-
-        // ROTA PARA CARDS
         '/cards': (context) => const CardsScreen(),
       },
     );
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+///
+/// AuthWrapper agora é responsável por verificar login e,
+/// se user != null, faz a checagem de versão. Isso evita
+/// que a checagem seja atropelada ao mudar de tela.
+///
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({Key? key}) : super(key: key);
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  final UpdateService _updateService = UpdateService();
+  bool _alreadyChecked = false;
+  String _localVersion = "0.0.0";
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        // Caso ainda esteja carregando user
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
+
         final user = snapshot.data;
-        return user == null ? const LoginScreen() : const HomeScreen();
+        // Se não estiver logado
+        if (user == null) {
+          return const LoginScreen();
+        }
+
+        // Se já está logado, antes de ir pro HomeScreen, checamos versão
+        if (!_alreadyChecked) {
+          _checkVersionAfterLogin();
+          _alreadyChecked = true;
+        }
+
+        return const HomeScreen();
       },
     );
+  }
+
+  Future<void> _checkVersionAfterLogin() async {
+    print("[AuthWrapperState] _checkVersionAfterLogin called");
+    final info = await PackageInfo.fromPlatform();
+    _localVersion = info.version;
+    print("[AuthWrapperState] localVersion = $_localVersion");
+
+    final remoteData = await _updateService.fetchPlatformVersionInfo();
+    if (remoteData == null) {
+      print("[AuthWrapperState] remoteData == null, no update info found");
+      return;
+    }
+
+    final remoteVersion = remoteData['versionName'] ?? "0.0.0";
+    final downloadUrl = remoteData['downloadUrl'] ?? "";
+    print(
+        "[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl");
+
+    final isNewer =
+        _updateService.isRemoteVersionNewer(_localVersion, remoteVersion);
+    if (isNewer) {
+      print("[AuthWrapperState] isNewer == true, showing popup");
+      Future.microtask(() {
+        _showUpdateDialog(remoteVersion, downloadUrl);
+      });
+    } else {
+      print("[AuthWrapperState] isNewer == false, no popup");
+    }
+  }
+
+  void _showUpdateDialog(String remoteVersion, String downloadUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text("New version available"),
+          content: Text("A new version ($remoteVersion) is available. "
+              "Your current version is $_localVersion. Update now?"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                print("[AuthWrapperState] User chose Later");
+                Navigator.pop(ctx);
+              },
+              child: const Text("Later"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                print("[AuthWrapperState] User chose Update");
+                Navigator.pop(ctx);
+                _openUpdateLink(downloadUrl);
+              },
+              child: const Text("Update"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _openUpdateLink(String url) async {
+    if (url.isNotEmpty) {
+      print("[AuthWrapperState] Opening update link: $url");
+      await launchUrl(Uri.parse(url));
+    } else {
+      print("[AuthWrapperState] No download URL provided");
+    }
   }
 }
 
 class MyHomePage extends StatelessWidget {
   const MyHomePage({Key? key}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(

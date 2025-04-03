@@ -46,7 +46,7 @@
         <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
 
-    <!-- Permissões Necessárias -->
+    <!-- Permissões do app -->
     <key>NSCameraUsageDescription</key>
     <string>Este aplicativo precisa acessar a câmera para tirar fotos.</string>
 
@@ -58,6 +58,9 @@
 
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>Este aplicativo precisa salvar fotos na sua galeria.</string>
+
+    <!-- Descrição para uso de notificações locais -->
+    <key>NSLocalNotificationUsageDescription</key>
+    <string>Este aplicativo usa notificações para lembrar você de preencher o timesheet diário.</string>
 </dict>
 </plist>
-

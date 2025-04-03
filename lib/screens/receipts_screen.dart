@@ -21,13 +21,10 @@ class ReceiptsScreen extends StatefulWidget {
 }
 
 class _ReceiptsScreenState extends State<ReceiptsScreen> {
-  // Filtros
+  // Filtros (iguais antes)
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   bool _isDescending = true;
-
-  // Para armazenar quem está selecionado via checkbox
-  final Map<String, Map<String, dynamic>> _selectedReceipts = {};
 
   // Creator & Cards filters
   Map<String, String> _userMap = {};
@@ -37,17 +34,49 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   List<String> _cardList = ["Card"];
   String _selectedCard = "Card";
 
+  // Armazena quem está selecionado via checkbox
+  final Map<String, Map<String, dynamic>> _selectedReceipts = {};
+
   // Dados do usuário atual
   String _userRole = "User";
   String _userId = "";
+
+  // ========= NOVOS CAMPOS PARA PAGINAÇÃO =========
+  final ScrollController _scrollController = ScrollController();
+
+  // Lista local com TODOS os docs que já carregamos
+  List<DocumentSnapshot> _allReceipts = [];
+
+  // DocSnapshot do último documento carregado na paginação
+  DocumentSnapshot? _lastDoc;
+
+  // Se ainda existem mais documentos (para evitar novas requisições depois de acabar)
+  bool _hasMore = true;
+
+  // Se estamos carregando mais documentos agora
+  bool _isLoadingMore = false;
+
+  // Tamanho de cada "página"
+  final int _pageSize = 15;
 
   @override
   void initState() {
     super.initState();
     _getUserInfo();
     _loadCardList();
+
+    // Listener do scroll, para detectar fim da lista
+    _scrollController.addListener(() {
+      // Se a rolagem chegou perto do final (ex.: 90%):
+      if (_scrollController.position.pixels >=
+          _scrollController.position.maxScrollExtent * 0.9) {
+        // Tenta carregar mais, se não estivermos carregando e ainda tiver
+        _loadMoreReceipts();
+      }
+    });
   }
 
+  // Carrega dados iniciais de user
   Future<void> _getUserInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -60,11 +89,15 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         _userRole = userDoc.data()?["role"] ?? "User";
       }
     }
-    // Depois de saber o userId e role, carregamos a lista de usuários
+    // Depois de saber userId/role, carregamos a lista de usuários para o dropdown
     await _loadUsers();
+
     setState(() {});
+    // Por fim, carrega a primeira página de receipts
+    _loadFirstPage();
   }
 
+  // Carrega nomes de usuários (para o filtro "Creator")
   Future<void> _loadUsers() async {
     try {
       final snapshot =
@@ -84,24 +117,78 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       _userMap = tempMap;
       _creatorList = ["Creator", ...sortedNames];
     } catch (e) {
-      debugPrint("Error loading users: $e");
+      debugPrint("Erro ao carregar usuários: $e");
     }
   }
 
+  // Só ilustrativo, caso quisesse montar dropdown de cards. (Você já fazia local)
   Future<void> _loadCardList() async {
-    // Se quiser buscar cards do Firestore, faça-o aqui
+    // Você pode buscar do Firestore, se quiser...
     setState(() {
-      _cardList = [
-        "Card",
-        "Visa 1111",
-        "Master 2222",
-        "Amex 1234",
-      ];
+      _cardList = ["Card", "Visa 1111", "Master 2222", "Amex 1234"];
     });
   }
 
-  /// Retorna o stream de recibos, dependendo da role
-  Stream<QuerySnapshot> _getReceiptsStream() {
+  // ====================== PAGINAÇÃO FIRESTORE ==========================
+  // Carrega a primeira página (limit 15)
+  Future<void> _loadFirstPage() async {
+    try {
+      _allReceipts.clear();
+      _lastDoc = null;
+      _hasMore = true;
+      Query baseQuery = _getBaseQuery();
+      // limit(15)
+      final snap = await baseQuery.limit(_pageSize).get();
+
+      _allReceipts.addAll(snap.docs);
+      if (snap.docs.isNotEmpty) {
+        _lastDoc = snap.docs.last;
+      }
+      // Se veio menos do que _pageSize, então não tem mais
+      if (snap.docs.length < _pageSize) {
+        _hasMore = false;
+      }
+      setState(() {});
+    } catch (e) {
+      debugPrint("Erro ao carregar primeira página: $e");
+    }
+  }
+
+  // Carrega mais 15 usando startAfterDocument(_lastDoc)
+  Future<void> _loadMoreReceipts() async {
+    // Se já estamos carregando ou não tem mais, sai
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    try {
+      Query baseQuery = _getBaseQuery();
+      final snap =
+          await baseQuery.limit(_pageSize).startAfterDocument(_lastDoc!).get();
+
+      _allReceipts.addAll(snap.docs);
+      if (snap.docs.isNotEmpty) {
+        _lastDoc = snap.docs.last;
+      }
+      // Se veio menos que _pageSize, não tem mais
+      if (snap.docs.length < _pageSize) {
+        _hasMore = false;
+      }
+      setState(() {});
+    } catch (e) {
+      debugPrint("Erro ao carregar mais receipts: $e");
+    } finally {
+      setState(() {
+        _isLoadingMore = false;
+      });
+    }
+  }
+
+  /// Monta a query base para saber se é Admin ou não.
+  /// Se Admin, retornamos .orderBy("timestamp")
+  /// Senão, filtramos por userId
+  Query _getBaseQuery() {
     Query query = FirebaseFirestore.instance
         .collection("receipts")
         .orderBy("timestamp", descending: true);
@@ -110,16 +197,43 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       query = query.where("userId", isEqualTo: _userId);
     }
 
-    return query.snapshots();
+    return query;
   }
+  // ====================== FIM PAGINAÇÃO ==========================
 
-  /// Aplica os filtros (Creator, Card, Range, Asc/Desc) a uma lista local
-  List<Map<String, dynamic>> _applyFiltersLocally(
-      List<Map<String, dynamic>> source) {
-    // Copiamos a lista para não modificar o original
-    var items = List<Map<String, dynamic>>.from(source);
+  /// Aplica os filtros que você já tinha “localmente” na lista _allReceipts.
+  /// Lembre-se que se não carregou todos do Firestore, o filtro será parcial.
+  List<Map<String, dynamic>> _applyLocalFilters() {
+    // Precisamos converter _allReceipts (DocumentSnapshot) para o formato
+    // que você usava antes: com data 'parsedDate', 'creatorName', etc.
+    final List<Map<String, dynamic>> rawItems = [];
 
-    // Filtro Creator
+    for (var doc in _allReceipts) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final docId = doc.id;
+
+      final rawDateString = data['date'] ?? '';
+      DateTime? parsedDate;
+      try {
+        parsedDate = DateFormat("M/d/yy").parse(rawDateString);
+      } catch (_) {
+        parsedDate = null;
+      }
+
+      final uid = data['userId'] ?? '';
+      final creatorName = _userMap[uid] ?? '';
+
+      rawItems.add({
+        'docId': docId,
+        'data': data,
+        'parsedDate': parsedDate,
+        'creatorName': creatorName,
+      });
+    }
+
+    // Agora filtramos igual antes
+    // 1) Por Creator
+    var items = List<Map<String, dynamic>>.from(rawItems);
     if (_selectedCreator != "Creator") {
       items = items.where((item) {
         final cName = item['creatorName'] as String;
@@ -127,7 +241,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // Filtro Card
+    // 2) Por Card
     if (_selectedCard != "Card") {
       items = items.where((item) {
         final map = item['data'] as Map<String, dynamic>;
@@ -136,7 +250,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // Filtro Date Range
+    // 3) Filtro por intervalo de datas
     if (_selectedRange != null) {
       final start = _selectedRange!.start;
       final end = _selectedRange!.end;
@@ -148,7 +262,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // Ordenação Asc/Desc
+    // 4) Ordenação asc/desc
     items.sort((a, b) {
       final dtA = a['parsedDate'] as DateTime?;
       final dtB = b['parsedDate'] as DateTime?;
@@ -164,6 +278,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Aplica filtros localmente
+    final filteredItems = _applyLocalFilters();
+
     return BaseLayout(
       title: "Time Sheet",
       child: Padding(
@@ -178,57 +295,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
               const SizedBox(height: 20),
               _buildFilterContainer(context),
             ],
-            // Aqui usamos StreamBuilder
+            // Lista principal
             Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: _getReceiptsStream(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text("Error: ${snapshot.error}"),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  // Monta a lista local "rawItems"
-                  final docs = snapshot.data?.docs ?? [];
-                  final List<Map<String, dynamic>> rawItems = [];
-
-                  for (var doc in docs) {
-                    final map = doc.data() as Map<String, dynamic>? ?? {};
-                    final docId = doc.id;
-
-                    final rawDateString = map['date'] ?? '';
-                    DateTime? parsedDate;
-                    try {
-                      parsedDate = DateFormat("M/d/yy").parse(rawDateString);
-                    } catch (_) {
-                      parsedDate = null;
-                    }
-
-                    final uid = map['userId'] ?? '';
-                    final creatorName = _userMap[uid] ?? '';
-
-                    rawItems.add({
-                      'docId': docId,
-                      'data': map,
-                      'parsedDate': parsedDate,
-                      'creatorName': creatorName,
-                    });
-                  }
-
-                  // Aplica filtros localmente
-                  final filtered = _applyFiltersLocally(rawItems);
-
-                  if (filtered.isEmpty) {
-                    return const Center(child: Text("No receipts found."));
-                  }
-
-                  // Renderiza o grid
-                  return _buildReceiptsGrid(filtered);
-                },
-              ),
+              child: _buildReceiptsGrid(filteredItems),
             ),
           ],
         ),
@@ -267,7 +336,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
             ],
           ),
 
-          // Botões à direita, somente se admin
+          // Botões à direita (Admin)
           if (_userRole == "Admin") ...[
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -439,10 +508,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                     child: DropdownButton<String>(
                       value: _selectedCard,
                       style: const TextStyle(fontSize: 14, color: Colors.black),
-                      onChanged: (String? newValue) {
-                        if (newValue != null) {
+                      onChanged: (String? value) {
+                        if (value != null) {
                           setState(() {
-                            _selectedCard = newValue;
+                            _selectedCard = value;
                           });
                         }
                       },
@@ -522,13 +591,12 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     );
   }
 
-  /// Constrói o Grid de recibos com base em [filteredItems],
-  /// já filtrados no builder.
   Widget _buildReceiptsGrid(List<Map<String, dynamic>> filteredItems) {
     if (filteredItems.isEmpty) {
       return const Center(child: Text("No receipts found."));
     }
     return GridView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
@@ -552,7 +620,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
           day = DateFormat('d').format(dt);
           month = DateFormat('MMM').format(dt);
         }
-
         final imageUrl = map['imageUrl'] ?? '';
 
         return GestureDetector(
@@ -576,7 +643,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
             ),
             child: Column(
               children: [
-                // Se quisesse remover a imagem, só remover esse Expanded
                 Expanded(
                   child: imageUrl.isNotEmpty
                       ? ClipRRect(
@@ -682,6 +748,25 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     );
   }
 
+  Future<void> _pickDateRange(BuildContext context) async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedRange ??
+          DateTimeRange(
+            start: now.subtract(const Duration(days: 7)),
+            end: now,
+          ),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected != null) {
+      setState(() {
+        _selectedRange = selected;
+      });
+    }
+  }
+
   Future<void> _scanDocument() async {
     try {
       List<String>? scannedImages = await CunningDocumentScanner.getPictures();
@@ -701,25 +786,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Scanning failed: $e")),
       );
-    }
-  }
-
-  Future<void> _pickDateRange(BuildContext context) async {
-    final now = DateTime.now();
-    final selected = await showDateRangePicker(
-      context: context,
-      initialDateRange: _selectedRange ??
-          DateTimeRange(
-            start: now.subtract(const Duration(days: 7)),
-            end: now,
-          ),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (selected != null) {
-      setState(() {
-        _selectedRange = selected;
-      });
     }
   }
 
@@ -743,20 +809,15 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   }
 
   void _handleSelectAll() {
+    // Seleciona todos os itens FILTRADOS atualmente visíveis
+    final filtered = _applyLocalFilters();
     setState(() {
-      // Precisamos pegar o que estiver filtrado no grid
-      // e adicionar ao _selectedReceipts
-      // Mas note que chamamos _buildReceiptsGrid(...) passando [filteredItems]
-      // Logo, podemos armazenar esses items localmente ou "ousar" nada
-      // Para simplificar, podemos re-aplicar local aqui também, mas sem setState
-      // Nesse caso, iremos recuperar com a StreamBuilder ou armazenar
-      // de antemão. Se quisermos "fingir" que todos estão ali, segue:
-      // O approach mais correto: re-filtrar no local:
-      // ...
-      // Por simplicidade, iremos apenas iterar no _buildReceiptsGrid
-      // => ou passamos a lista "filtered" ao handle. Veja abaixo:
+      for (var item in filtered) {
+        final docId = item['docId'] as String;
+        final map = item['data'] as Map<String, dynamic>;
+        _selectedReceipts[docId] = map;
+      }
     });
-    // Exemplo rápido: se quiser manter a mesma approach, ok...
   }
 
   void _handleDeselectAll() {
