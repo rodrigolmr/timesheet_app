@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 class TimeSheetRowItem extends StatefulWidget {
-  final String day; // Ex: "26"
-  final String month; // Ex: "Jan"
-  final String jobName; // Ex: "Dolce amore/cipla"
-  final String userName; // Ex: "Stefen"
+  final String day;
+  final String month;
+  final String jobName;
+  final String userName;
   final bool initialChecked;
-
-  /// Callback para notificar quando o checkbox é marcado/desmarcado
   final ValueChanged<bool>? onCheckChanged;
 
   const TimeSheetRowItem({
@@ -17,7 +15,7 @@ class TimeSheetRowItem extends StatefulWidget {
     required this.jobName,
     required this.userName,
     this.initialChecked = false,
-    this.onCheckChanged, // <-- Adicionado
+    this.onCheckChanged,
   }) : super(key: key);
 
   @override
@@ -30,17 +28,29 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
   @override
   void initState() {
     super.initState();
+    // Define o estado local inicialmente com base na prop
     _isChecked = widget.initialChecked;
+  }
+
+  /// Se o pai mudar o `initialChecked` (por ex: "Select All"),
+  /// sincronizamos `_isChecked` para refletir a nova prop.
+  @override
+  void didUpdateWidget(covariant TimeSheetRowItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialChecked != widget.initialChecked) {
+      setState(() {
+        _isChecked = widget.initialChecked;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      // Desloca todo o conjunto 10px para a direita
       margin: const EdgeInsets.only(left: 10),
       child: Center(
         child: SizedBox(
-          width: 328, // 288 (container azul) + 40 (checkbox) = 328 total
+          width: 328,
           child: Row(
             children: [
               // CONTAINER PRINCIPAL (borda azul) - 288px de largura
@@ -49,20 +59,17 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                 height: 45,
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFFFD0), // Fundo amarelo claro
-                  border: Border.all(
-                    color: const Color(0xFF0205D3), // Azul
-                    width: 1,
-                  ),
+                  border: Border.all(color: const Color(0xFF0205D3), width: 1),
                   borderRadius: BorderRadius.circular(5),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Row(
                   children: [
-                    // 1) DIA E MÊS (40 px), arredondado à esquerda
+                    // 1) DIA E MÊS (40 px)
                     Container(
                       width: 40,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFE8E5FF), // Fundo lilás
+                        color: Color(0xFFE8E5FF),
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(5),
                           bottomLeft: Radius.circular(5),
@@ -71,7 +78,6 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // Dia (25 px de altura)
                           SizedBox(
                             height: 25,
                             child: FittedBox(
@@ -79,14 +85,13 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                               child: Text(
                                 widget.day,
                                 style: const TextStyle(
-                                  fontSize: 22, // Dia
+                                  fontSize: 22,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFFF0000), // #FF0000
+                                  color: Color(0xFFFF0000),
                                 ),
                               ),
                             ),
                           ),
-                          // Mês (16 px de altura)
                           SizedBox(
                             height: 16,
                             child: FittedBox(
@@ -94,9 +99,9 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                               child: Text(
                                 widget.month,
                                 style: const TextStyle(
-                                  fontSize: 13, // Mês
+                                  fontSize: 13,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF000000), // #000000
+                                  color: Color(0xFF000000),
                                 ),
                               ),
                             ),
@@ -104,51 +109,37 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                         ],
                       ),
                     ),
-
-                    // 2) NOME DO JOB (170 px), em até 2 linhas
+                    // 2) NOME DO JOB (170 px)
                     Container(
                       width: 170,
-                      alignment: Alignment.center, // <-- Centraliza
+                      alignment: Alignment.center,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text(
                         widget.jobName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center, // <-- Texto centralizado
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 13, // 13 p/ job name
+                          fontSize: 13,
                           color: Color(0xFF3B3B3B),
                         ),
                       ),
                     ),
-
-                    // LINHA VERTICAL BRANCA (2 px)
+                    // LINHA VERTICAL BRANCA
                     Container(
-                      width: 2,
-                      height:
-                          double.infinity, // Preenche a altura do pai (45px)
-                      color: Colors.white,
-                    ),
-
-                    // 3) NOME DO USUÁRIO (72 px), arredondado à direita, em até 2 linhas
+                        width: 2, height: double.infinity, color: Colors.white),
+                    // 3) NOME DO USUÁRIO (72 px)
                     Container(
                       width: 72,
-                      decoration: const BoxDecoration(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.only(
-                          topRight: Radius.circular(5),
-                          bottomRight: Radius.circular(5),
-                        ),
-                      ),
-                      alignment: Alignment.center, // <-- Centraliza
+                      alignment: Alignment.center,
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Text(
                         widget.userName,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center, // <-- Texto centralizado
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 10, // 10 p/ user
+                          fontSize: 10,
                           fontStyle: FontStyle.italic,
                           color: Color(0xFF3B3B3B),
                         ),
@@ -157,7 +148,6 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                   ],
                 ),
               ),
-
               // CHECKBOX FORA DA BORDA AZUL - 40px
               SizedBox(
                 width: 40,
@@ -169,7 +159,7 @@ class _TimeSheetRowItemState extends State<TimeSheetRowItem> {
                       setState(() {
                         _isChecked = checked;
                       });
-                      // Chama callback para notificar o "pai" que houve mudança
+                      // Notifica o pai
                       if (widget.onCheckChanged != null) {
                         widget.onCheckChanged!(checked);
                       }

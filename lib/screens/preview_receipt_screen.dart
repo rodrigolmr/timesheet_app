@@ -13,8 +13,6 @@ import '../widgets/custom_input_field.dart';
 import '../widgets/custom_multiline_input_field.dart';
 import '../widgets/date_picker_input.dart';
 import '../widgets/custom_button.dart';
-
-// O widget dropdown especial:
 import '../widgets/custom_dropdown_field.dart';
 
 /// USDCurrencyInputFormatter
@@ -53,7 +51,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
 
   bool _isUploading = false;
 
-  /// Lista dos cartões ativos: [ { 'last4': '1234', 'name': 'Fulano' }, ... ]
+  /// Lista dos cartões ativos: [ { 'last4': '1234', 'cardholderName': 'Fulano' }, ... ]
   List<Map<String, String>> _activeCards = [];
 
   /// Valor selecionado no dropdown (ex: "1234 - Fulano")
@@ -65,7 +63,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
     _loadActiveCards();
   }
 
-  /// Carrega todos os cartões com status=ativo em 'cards'
+  /// Carrega todos os cartões com status=ativo na coleção 'cards'
   Future<void> _loadActiveCards() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -108,10 +106,10 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
             const Center(child: TitleBox(title: "New Receipt")),
             const SizedBox(height: 20),
 
-            // Ao invés do CustomInputField fixo, agora exibimos o dropdown ou fallback
-            _buildCardLast4Field(),
-
+            // Dropdown para selecionar o cartão (last4 e nome)
+            _buildCardLast4Dropdown(),
             const SizedBox(height: 16),
+
             // Purchase date
             DatePickerInput(
               label: "Purchase date",
@@ -119,6 +117,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               controller: _dateController,
             ),
             const SizedBox(height: 16),
+
             // Amount
             CustomInputField(
               label: "Amount",
@@ -129,6 +128,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               inputFormatters: [USDCurrencyInputFormatter()],
             ),
             const SizedBox(height: 16),
+
             // Description
             CustomMultilineInputField(
               label: "Description",
@@ -181,50 +181,32 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
     );
   }
 
-  /// Constrói o campo de "Last 4 digits" usando CustomDropdownField
-  /// se houver cartões ativos, ou fallback para CustomInputField se não houver.
-  Widget _buildCardLast4Field() {
-    if (_activeCards.isEmpty) {
-      // Fallback: sem cartões ativos, exibe o input normal
-      return CustomInputField(
-        label: "Last 4 digits",
-        hintText: "Enter the last 4 digits of the card",
-        controller: _cardLast4Controller,
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(4),
-        ],
-      );
-    } else {
-      // Monta a lista de opções no estilo "1234 - Fulano"
-      final List<String> dropdownItems = _activeCards.map((map) {
-        final last4 = map['last4'] ?? '';
-        final name = map['cardholderName'] ?? '';
-        return "$last4 - $name";
-      }).toList();
+  Widget _buildCardLast4Dropdown() {
+    final List<String> dropdownItems = _activeCards.isNotEmpty
+        ? _activeCards.map((map) {
+            final last4 = map['last4'] ?? '';
+            final holder = map['cardholderName'] ?? '';
+            return "$last4 - $holder";
+          }).toList()
+        : [];
 
-      return CustomDropdownField(
-        label: "Last 4 digits",
-        hintText: "Select the card",
-        items: dropdownItems,
-        value: _selectedCardOption,
-        // Quando muda a seleção, salvamos
-        // e extraímos somente o last4 antes do ' - '
-        onChanged: (newValue) {
-          setState(() {
-            _selectedCardOption = newValue;
-            // Se newValue = "1234 - Fulano", split:
-            if (newValue != null && newValue.contains(' - ')) {
-              final parts = newValue.split(' - ');
-              _cardLast4Controller.text = parts[0]; // "1234"
-            } else {
-              _cardLast4Controller.clear();
-            }
-          });
-        },
-      );
-    }
+    return CustomDropdownField(
+      label: "Last 4 digits",
+      hintText: "Select the card",
+      items: dropdownItems,
+      value: _selectedCardOption,
+      onChanged: (newValue) {
+        setState(() {
+          _selectedCardOption = newValue;
+          if (newValue != null && newValue.contains(' - ')) {
+            final parts = newValue.split(' - ');
+            _cardLast4Controller.text = parts[0]; // "1234"
+          } else {
+            _cardLast4Controller.clear();
+          }
+        });
+      },
+    );
   }
 
   void _attemptUpload(String? imagePath) {
@@ -270,7 +252,13 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Receipt uploaded successfully!")),
       );
-      Navigator.pop(context);
+
+      // Redirecionar para HomeScreen
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        '/home',
+        (route) => false,
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Upload failed: $e")),

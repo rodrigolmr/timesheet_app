@@ -41,7 +41,7 @@ class CustomDropdownField extends StatelessWidget {
     return Container(
       width: fieldWidth < 0 ? 0 : fieldWidth,
       height: 40,
-      // Se 'error == true', exibe sombra vermelha
+      // Sombrinha vermelha se error == true
       decoration: error
           ? BoxDecoration(
               boxShadow: [
@@ -54,12 +54,22 @@ class CustomDropdownField extends StatelessWidget {
             )
           : null,
       child: DropdownButtonFormField<String>(
-        // Deixa denso para ocupar menos espaço vertical
         isDense: true,
         focusNode: focusNode,
+
+        /// Se não há valor selecionado, esse `hint` aparece
+        /// e aqui definimos explicitamente cor=preto (black).
+        hint: Text(
+          hintText,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.black,
+          ),
+        ),
+
         value: value,
         onChanged: (newValue) {
-          // Se estava em erro e temos callback, limpa o erro
           if (error && onClearError != null) {
             onClearError!();
           }
@@ -73,7 +83,9 @@ class CustomDropdownField extends StatelessWidget {
             child: Text(itemValue),
           );
         }).toList(),
-        // Decoração com mesmo estilo do CustomInputField
+
+        /// Aqui configuramos a `InputDecoration` para ter label, borda etc.
+        /// Mas NÃO use `hintText:` nela, pois vai conflitar com o hint do dropdown.
         decoration: InputDecoration(
           labelText: label,
           labelStyle: const TextStyle(
@@ -86,11 +98,7 @@ class CustomDropdownField extends StatelessWidget {
             fontSize: 12,
             color: appBlueColor,
           ),
-          hintText: hintText,
-          hintStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.grey,
-          ),
+          // Removemos o hintText daqui para evitar conflito
           prefixText: prefixText,
           filled: true,
           fillColor: appYellowColor,
