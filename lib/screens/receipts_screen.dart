@@ -1,5 +1,3 @@
-// lib/screens/receipts_screen.dart
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,42 +19,25 @@ class ReceiptsScreen extends StatefulWidget {
 }
 
 class _ReceiptsScreenState extends State<ReceiptsScreen> {
-  // Filtros (iguais antes)
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   bool _isDescending = true;
-
-  // Creator & Cards filters
   Map<String, String> _userMap = {};
   List<String> _creatorList = ["Creator"];
   String _selectedCreator = "Creator";
 
+  // Agora carrega a lista de cartoes dinamicamente
   List<String> _cardList = ["Card"];
   String _selectedCard = "Card";
 
-  // Armazena quem está selecionado via checkbox
   final Map<String, Map<String, dynamic>> _selectedReceipts = {};
-
-  // Dados do usuário atual
   String _userRole = "User";
   String _userId = "";
-
-  // ========= NOVOS CAMPOS PARA PAGINAÇÃO =========
   final ScrollController _scrollController = ScrollController();
-
-  // Lista local com TODOS os docs que já carregamos
   List<DocumentSnapshot> _allReceipts = [];
-
-  // DocSnapshot do último documento carregado na paginação
   DocumentSnapshot? _lastDoc;
-
-  // Se ainda existem mais documentos (para evitar novas requisições depois de acabar)
   bool _hasMore = true;
-
-  // Se estamos carregando mais documentos agora
   bool _isLoadingMore = false;
-
-  // Tamanho de cada "página"
   final int _pageSize = 15;
 
   @override
@@ -64,19 +45,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     super.initState();
     _getUserInfo();
     _loadCardList();
-
-    // Listener do scroll, para detectar fim da lista
     _scrollController.addListener(() {
-      // Se a rolagem chegou perto do final (ex.: 90%):
       if (_scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent * 0.9) {
-        // Tenta carregar mais, se não estivermos carregando e ainda tiver
         _loadMoreReceipts();
       }
     });
   }
 
-  // Carrega dados iniciais de user
   Future<void> _getUserInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -89,15 +65,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         _userRole = userDoc.data()?["role"] ?? "User";
       }
     }
-    // Depois de saber userId/role, carregamos a lista de usuários para o dropdown
     await _loadUsers();
-
     setState(() {});
-    // Por fim, carrega a primeira página de receipts
     _loadFirstPage();
   }
 
-  // Carrega nomes de usuários (para o filtro "Creator")
   Future<void> _loadUsers() async {
     try {
       final snapshot =
@@ -117,67 +89,73 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       _userMap = tempMap;
       _creatorList = ["Creator", ...sortedNames];
     } catch (e) {
-      debugPrint("Erro ao carregar usuários: $e");
+      // Se quiser, trate erro
     }
   }
 
-  // Só ilustrativo, caso quisesse montar dropdown de cards. (Você já fazia local)
+  /// Agora faz a leitura dos cartoes no Firestore
   Future<void> _loadCardList() async {
-    // Você pode buscar do Firestore, se quiser...
-    setState(() {
-      _cardList = ["Card", "Visa 1111", "Master 2222", "Amex 1234"];
-    });
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('cards')
+          .where('status', isEqualTo: 'ativo')
+          .get();
+      final List<String> loaded = [];
+      for (var doc in snap.docs) {
+        final data = doc.data();
+        final last4 = data['last4Digits']?.toString() ?? '';
+        if (last4.isNotEmpty) {
+          loaded.add(last4);
+        }
+      }
+      loaded.sort();
+      setState(() {
+        _cardList = ["Card", ...loaded];
+      });
+    } catch (e) {
+      // Em caso de erro, pode logar ou manter a lista original
+    }
   }
 
-  // ====================== PAGINAÇÃO FIRESTORE ==========================
-  // Carrega a primeira página (limit 15)
   Future<void> _loadFirstPage() async {
     try {
       _allReceipts.clear();
       _lastDoc = null;
       _hasMore = true;
       Query baseQuery = _getBaseQuery();
-      // limit(15)
       final snap = await baseQuery.limit(_pageSize).get();
-
       _allReceipts.addAll(snap.docs);
       if (snap.docs.isNotEmpty) {
         _lastDoc = snap.docs.last;
       }
-      // Se veio menos do que _pageSize, então não tem mais
       if (snap.docs.length < _pageSize) {
         _hasMore = false;
       }
       setState(() {});
     } catch (e) {
-      debugPrint("Erro ao carregar primeira página: $e");
+      // Trate erro
     }
   }
 
-  // Carrega mais 15 usando startAfterDocument(_lastDoc)
   Future<void> _loadMoreReceipts() async {
-    // Se já estamos carregando ou não tem mais, sai
     if (_isLoadingMore || !_hasMore) return;
     setState(() {
       _isLoadingMore = true;
     });
-
     try {
       Query baseQuery = _getBaseQuery();
       final snap =
           await baseQuery.limit(_pageSize).startAfterDocument(_lastDoc!).get();
-
       _allReceipts.addAll(snap.docs);
       if (snap.docs.isNotEmpty) {
         _lastDoc = snap.docs.last;
       }
-      // Se veio menos que _pageSize, não tem mais
       if (snap.docs.length < _pageSize) {
         _hasMore = false;
       }
       setState(() {});
     } catch (e) {
-      debugPrint("Erro ao carregar mais receipts: $e");
+      // Trate erro
     } finally {
       setState(() {
         _isLoadingMore = false;
@@ -185,33 +163,22 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
     }
   }
 
-  /// Monta a query base para saber se é Admin ou não.
-  /// Se Admin, retornamos .orderBy("timestamp")
-  /// Senão, filtramos por userId
   Query _getBaseQuery() {
     Query query = FirebaseFirestore.instance
         .collection("receipts")
         .orderBy("timestamp", descending: true);
-
     if (_userRole != "Admin") {
       query = query.where("userId", isEqualTo: _userId);
     }
-
     return query;
   }
-  // ====================== FIM PAGINAÇÃO ==========================
 
-  /// Aplica os filtros que você já tinha “localmente” na lista _allReceipts.
-  /// Lembre-se que se não carregou todos do Firestore, o filtro será parcial.
+  /// Aplica filtros localmente a partir da lista _allReceipts
   List<Map<String, dynamic>> _applyLocalFilters() {
-    // Precisamos converter _allReceipts (DocumentSnapshot) para o formato
-    // que você usava antes: com data 'parsedDate', 'creatorName', etc.
     final List<Map<String, dynamic>> rawItems = [];
-
     for (var doc in _allReceipts) {
       final data = doc.data() as Map<String, dynamic>? ?? {};
       final docId = doc.id;
-
       final rawDateString = data['date'] ?? '';
       DateTime? parsedDate;
       try {
@@ -219,10 +186,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       } catch (_) {
         parsedDate = null;
       }
-
       final uid = data['userId'] ?? '';
       final creatorName = _userMap[uid] ?? '';
-
       rawItems.add({
         'docId': docId,
         'data': data,
@@ -231,9 +196,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       });
     }
 
-    // Agora filtramos igual antes
-    // 1) Por Creator
     var items = List<Map<String, dynamic>>.from(rawItems);
+
     if (_selectedCreator != "Creator") {
       items = items.where((item) {
         final cName = item['creatorName'] as String;
@@ -241,16 +205,15 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // 2) Por Card
+    // Aqui filtramos pelos 4 digitos do cartao ("cardLast4")
     if (_selectedCard != "Card") {
       items = items.where((item) {
         final map = item['data'] as Map<String, dynamic>;
-        final cardLabel = map['cardLabel'] ?? '';
-        return cardLabel == _selectedCard;
+        final cardLast4 = map['cardLast4'] ?? '';
+        return cardLast4 == _selectedCard;
       }).toList();
     }
 
-    // 3) Filtro por intervalo de datas
     if (_selectedRange != null) {
       final start = _selectedRange!.start;
       final end = _selectedRange!.end;
@@ -262,7 +225,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // 4) Ordenação asc/desc
     items.sort((a, b) {
       final dtA = a['parsedDate'] as DateTime?;
       final dtB = b['parsedDate'] as DateTime?;
@@ -272,15 +234,12 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       final cmp = dtA.compareTo(dtB);
       return _isDescending ? -cmp : cmp;
     });
-
     return items;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Aplica filtros localmente
     final filteredItems = _applyLocalFilters();
-
     return BaseLayout(
       title: "Time Sheet",
       child: Padding(
@@ -295,7 +254,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
               const SizedBox(height: 20),
               _buildFilterContainer(context),
             ],
-            // Lista principal
             Expanded(
               child: _buildReceiptsGrid(filteredItems),
             ),
@@ -311,7 +269,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Botões à esquerda
           Row(
             children: [
               CustomButton(
@@ -335,8 +292,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
               ],
             ],
           ),
-
-          // Botões à direita (Admin)
           if (_userRole == "Admin") ...[
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -515,11 +470,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
                           });
                         }
                       },
-                      items: _cardList.map((cardName) {
+                      items: _cardList.map((cardLast4) {
                         return DropdownMenuItem<String>(
-                          value: cardName,
+                          value: cardLast4,
                           child: Text(
-                            cardName,
+                            cardLast4,
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -604,8 +559,30 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         mainAxisSpacing: 8,
         childAspectRatio: 0.7,
       ),
-      itemCount: filteredItems.length,
+      itemCount: filteredItems.length + 1,
       itemBuilder: (context, index) {
+        if (index == filteredItems.length) {
+          if (_isLoadingMore) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 8),
+                  Text("Loading more receipts..."),
+                ],
+              ),
+            );
+          } else {
+            if (_hasMore && filteredItems.isNotEmpty) {
+              return Container();
+            } else {
+              return const Center(
+                child: Text("No more receipts."),
+              );
+            }
+          }
+        }
         final item = filteredItems[index];
         final docId = item['docId'] as String;
         final map = item['data'] as Map<String, dynamic>;
@@ -621,7 +598,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
           month = DateFormat('MMM').format(dt);
         }
         final imageUrl = map['imageUrl'] ?? '';
-
         return GestureDetector(
           onTap: () {
             Navigator.pushNamed(
@@ -809,7 +785,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   }
 
   void _handleSelectAll() {
-    // Seleciona todos os itens FILTRADOS atualmente visíveis
     final filtered = _applyLocalFilters();
     setState(() {
       for (var item in filtered) {
