@@ -10,6 +10,8 @@ import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_button_mini.dart';
+// Importe o RouteObserver global definido no main.dart
+import 'package:timesheet_app/main.dart';
 
 class ReceiptsScreen extends StatefulWidget {
   const ReceiptsScreen({Key? key}) : super(key: key);
@@ -18,7 +20,7 @@ class ReceiptsScreen extends StatefulWidget {
   _ReceiptsScreenState createState() => _ReceiptsScreenState();
 }
 
-class _ReceiptsScreenState extends State<ReceiptsScreen> {
+class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   bool _isDescending = true;
@@ -26,7 +28,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
   List<String> _creatorList = ["Creator"];
   String _selectedCreator = "Creator";
 
-  // Agora carrega a lista de cartoes dinamicamente
+  // Agora carrega a lista de cartões dinamicamente
   List<String> _cardList = ["Card"];
   String _selectedCard = "Card";
 
@@ -51,6 +53,19 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
         _loadMoreReceipts();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Registra esta tela no RouteObserver
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() {
+    // Quando voltar para a tela, recarrega os recibos
+    _loadFirstPage();
   }
 
   Future<void> _getUserInfo() async {
@@ -89,11 +104,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       _userMap = tempMap;
       _creatorList = ["Creator", ...sortedNames];
     } catch (e) {
-      // Se quiser, trate erro
+      // Trate erro se desejar
     }
   }
 
-  /// Agora faz a leitura dos cartoes no Firestore
+  /// Agora faz a leitura dos cartões no Firestore
   Future<void> _loadCardList() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -133,7 +148,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }
       setState(() {});
     } catch (e) {
-      // Trate erro
+      // Trate erro se desejar
     }
   }
 
@@ -155,7 +170,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }
       setState(() {});
     } catch (e) {
-      // Trate erro
+      // Trate erro se desejar
     } finally {
       setState(() {
         _isLoadingMore = false;
@@ -205,7 +220,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       }).toList();
     }
 
-    // Aqui filtramos pelos 4 digitos do cartao ("cardLast4")
+    // Filtra pelos 4 dígitos do cartão ("cardLast4")
     if (_selectedCard != "Card") {
       items = items.where((item) {
         final map = item['data'] as Map<String, dynamic>;
@@ -235,6 +250,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> {
       return _isDescending ? -cmp : cmp;
     });
     return items;
+  }
+
+  @override
+  void dispose() {
+    // Cancele a inscrição no RouteObserver
+    routeObserver.unsubscribe(this);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override

@@ -122,17 +122,13 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                           const Text(
                             "Note: ",
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.normal,
-                            ),
+                                fontSize: 11, fontWeight: FontWeight.normal),
                           ),
                           Expanded(
                             child: Text(
                               timesheetData.notes,
                               style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.normal,
-                              ),
+                                  fontSize: 11, fontWeight: FontWeight.normal),
                             ),
                           ),
                         ],
@@ -162,10 +158,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                     height: 90,
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFFFD0),
-                      border: Border.all(
-                        color: const Color(0xFF0205D3),
-                        width: 2,
-                      ),
+                      border:
+                          Border.all(color: const Color(0xFF0205D3), width: 2),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -230,7 +224,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                         await _submitTimesheet(timesheetData, editMode, docId);
                         Navigator.pushNamedAndRemoveUntil(
                           context,
-                          '/home',
+                          '/timesheets',
                           (route) => false,
                         );
                       }

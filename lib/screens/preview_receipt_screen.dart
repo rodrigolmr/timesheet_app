@@ -105,11 +105,9 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
           children: [
             const Center(child: TitleBox(title: "New Receipt")),
             const SizedBox(height: 20),
-
             // Dropdown para selecionar o cartão (last4 e nome)
             _buildCardLast4Dropdown(),
             const SizedBox(height: 16),
-
             // Purchase date
             DatePickerInput(
               label: "Purchase date",
@@ -117,7 +115,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               controller: _dateController,
             ),
             const SizedBox(height: 16),
-
             // Amount
             CustomInputField(
               label: "Amount",
@@ -128,7 +125,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               inputFormatters: [USDCurrencyInputFormatter()],
             ),
             const SizedBox(height: 16),
-
             // Description
             CustomMultilineInputField(
               label: "Description",
@@ -136,7 +132,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               controller: _descriptionController,
             ),
             const SizedBox(height: 20),
-
             // Botões
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -158,7 +153,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               ],
             ),
             const SizedBox(height: 20),
-
             // Imagem capturada
             if (imagePath != null && imagePath.isNotEmpty)
               Padding(
@@ -253,10 +247,10 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
         const SnackBar(content: Text("Receipt uploaded successfully!")),
       );
 
-      // Redirecionar para HomeScreen
+      // Redireciona para a tela de Receipts após o upload
       Navigator.pushNamedAndRemoveUntil(
         context,
-        '/home',
+        '/receipts',
         (route) => false,
       );
     } catch (e) {

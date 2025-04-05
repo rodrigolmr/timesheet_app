@@ -10,6 +10,8 @@ import '../widgets/custom_button.dart';
 import '../widgets/custom_button_mini.dart';
 import '../widgets/time_sheet_row.dart';
 import '../services/pdf_service.dart';
+// Importe o RouteObserver global definido no main.dart
+import 'package:timesheet_app/main.dart';
 
 class TimesheetsScreen extends StatefulWidget {
   const TimesheetsScreen({Key? key}) : super(key: key);
@@ -18,7 +20,7 @@ class TimesheetsScreen extends StatefulWidget {
   State<TimesheetsScreen> createState() => _TimesheetsScreenState();
 }
 
-class _TimesheetsScreenState extends State<TimesheetsScreen> {
+class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   List<String> _creatorList = ["Creator"];
@@ -48,6 +50,19 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
         _loadMoreTimesheets();
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Registra esta tela no RouteObserver
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
+  void didPopNext() {
+    // Quando voltar para essa tela, recarrega a lista
+    _loadFirstPage();
   }
 
   Future<void> _getUserInfo() async {
@@ -94,13 +109,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
       _creatorList = ["Creator", ...loaded];
       _usersMap = tempMap;
     } catch (e) {
-      // Trate erros se quiser
+      // Trate erros se desejar
     }
   }
 
-  /// Ajuste aqui se seus docs tiverem outro campo de data/hora:
-  /// Ex: orderBy("createdAt") ou orderBy("timestamp").
-  /// Aqui usamos "date" só para demonstrar.
+  /// Ajuste aqui se seus docs tiverem outro campo de data/hora.
   Query _getBaseQuery() {
     Query query = FirebaseFirestore.instance
         .collection("timesheets")
@@ -129,7 +142,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
 
       setState(() {});
     } catch (e) {
-      // Trate erro se quiser
+      // Trate erro se desejar
     }
   }
 
@@ -153,7 +166,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
       }
       setState(() {});
     } catch (e) {
-      // Trate erro se quiser
+      // Trate erro se desejar
     } finally {
       setState(() {
         _isLoadingMore = false;
@@ -216,6 +229,14 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> {
     });
 
     return items;
+  }
+
+  @override
+  void dispose() {
+    // Cancele a inscrição no RouteObserver
+    routeObserver.unsubscribe(this);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override

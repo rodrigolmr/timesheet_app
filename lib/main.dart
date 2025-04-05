@@ -22,6 +22,10 @@ import 'screens/receipt_viewer_screen.dart';
 import 'screens/cards_screen.dart';
 import 'services/update_service.dart';
 
+// Declaração global do RouteObserver
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -30,7 +34,7 @@ void main() async {
 
 ///
 /// A MyApp não faz mais a checagem de versão no initState.
-/// Em vez disso, deixamos ela apenas definir as rotas.
+/// Em vez disso, ela apenas define as rotas.
 ///
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
@@ -41,6 +45,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Timesheet App',
       theme: ThemeData(primarySwatch: Colors.blue),
+      navigatorObservers: [routeObserver], // Adiciona o RouteObserver aqui
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
@@ -71,8 +76,7 @@ class MyApp extends StatelessWidget {
 
 ///
 /// AuthWrapper agora é responsável por verificar login e,
-/// se user != null, faz a checagem de versão. Isso evita
-/// que a checagem seja atropelada ao mudar de tela.
+/// se user != null, fazer a checagem de versão.
 ///
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({Key? key}) : super(key: key);
@@ -91,7 +95,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Caso ainda esteja carregando user
+        // Caso ainda esteja carregando o usuário
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -104,7 +108,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const LoginScreen();
         }
 
-        // Se já está logado, antes de ir pro HomeScreen, checamos versão
+        // Se já está logado, antes de ir para a HomeScreen, checa a versão
         if (!_alreadyChecked) {
           _checkVersionAfterLogin();
           _alreadyChecked = true;
@@ -182,20 +186,5 @@ class _AuthWrapperState extends State<AuthWrapper> {
     } else {
       print("[AuthWrapperState] No download URL provided");
     }
-  }
-}
-
-class MyHomePage extends StatelessWidget {
-  const MyHomePage({Key? key}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Timesheet App'),
-      ),
-      body: const Center(
-        child: Text('Hello, world!'),
-      ),
-    );
   }
 }
