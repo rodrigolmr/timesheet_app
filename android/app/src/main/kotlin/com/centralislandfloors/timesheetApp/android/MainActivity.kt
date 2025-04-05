@@ -1,4 +1,4 @@
-package com.example.timesheet_app
+package com.centralislandfloors.timesheetApp.android
 
 import io.flutter.embedding.android.FlutterActivity
 

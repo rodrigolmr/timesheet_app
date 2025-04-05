@@ -1,9 +1,8 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.timesheet_app">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Permissão para Android 13+ notificar -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    
+
     <!-- Permissões para câmera e armazenamento -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
