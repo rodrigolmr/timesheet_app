@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.timesheet_app"
+    namespace = "com.centralislandfloors.timesheetApp.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.timesheet_app"
+        applicationId = "com.centralislandfloors.timesheetApp.android"
         minSdk = 23
         targetSdk = 35
         versionCode 1

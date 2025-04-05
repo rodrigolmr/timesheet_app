@@ -22,7 +22,6 @@ import 'screens/receipt_viewer_screen.dart';
 import 'screens/cards_screen.dart';
 import 'services/update_service.dart';
 
-// Declaração global do RouteObserver
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
@@ -32,10 +31,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-///
-/// A MyApp não faz mais a checagem de versão no initState.
-/// Em vez disso, ela apenas define as rotas.
-///
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
@@ -45,7 +40,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'Timesheet App',
       theme: ThemeData(primarySwatch: Colors.blue),
-      navigatorObservers: [routeObserver], // Adiciona o RouteObserver aqui
+      navigatorObservers: [routeObserver],
       initialRoute: '/',
       routes: {
         '/': (context) => const AuthWrapper(),
@@ -63,8 +58,8 @@ class MyApp extends StatelessWidget {
         '/receipts': (context) => const ReceiptsScreen(),
         '/preview-receipt': (context) => const PreviewReceiptScreen(),
         '/receipt-viewer': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments
-              as Map<String, dynamic>?;
+          final args =
+              ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           final imageUrl = args?['imageUrl'] ?? '';
           return ReceiptViewerScreen(imageUrl: imageUrl);
         },
@@ -74,10 +69,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-///
-/// AuthWrapper agora é responsável por verificar login e,
-/// se user != null, fazer a checagem de versão.
-///
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({Key? key}) : super(key: key);
 
@@ -95,7 +86,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        // Caso ainda esteja carregando o usuário
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -103,12 +93,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
 
         final user = snapshot.data;
-        // Se não estiver logado
         if (user == null) {
           return const LoginScreen();
         }
 
-        // Se já está logado, antes de ir para a HomeScreen, checa a versão
         if (!_alreadyChecked) {
           _checkVersionAfterLogin();
           _alreadyChecked = true;
@@ -134,7 +122,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final remoteVersion = remoteData['versionName'] ?? "0.0.0";
     final downloadUrl = remoteData['downloadUrl'] ?? "";
     print(
-        "[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl");
+      "[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl",
+    );
 
     final isNewer =
         _updateService.isRemoteVersionNewer(_localVersion, remoteVersion);
@@ -155,8 +144,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (ctx) {
         return AlertDialog(
           title: const Text("New version available"),
-          content: Text("A new version ($remoteVersion) is available. "
-              "Your current version is $_localVersion. Update now?"),
+          content: Text(
+            "A new version ($remoteVersion) is available. "
+            "Your current version is $_localVersion. Update now?",
+          ),
           actions: [
             TextButton(
               onPressed: () {

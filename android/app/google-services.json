@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:588817090632:android:a3adbc340405774278707d",
+        "mobilesdk_app_id": "1:588817090632:android:4ec8657ebc48122178707d",
         "android_client_info": {
-          "package_name": "com.example.timesheet_app"
+          "package_name": "com.centralislandfloors.timesheetApp.android"
         }
       },
       "oauth_client": [],
