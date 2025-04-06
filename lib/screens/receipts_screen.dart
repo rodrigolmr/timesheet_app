@@ -10,8 +10,8 @@ import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_button_mini.dart';
+// Importe o RouteObserver global definido no main.dart
 import 'package:timesheet_app/main.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 
 class ReceiptsScreen extends StatefulWidget {
   const ReceiptsScreen({Key? key}) : super(key: key);
@@ -27,8 +27,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   Map<String, String> _userMap = {};
   List<String> _creatorList = ["Creator"];
   String _selectedCreator = "Creator";
+
+  // Agora carrega a lista de cartões dinamicamente
   List<String> _cardList = ["Card"];
   String _selectedCard = "Card";
+
   final Map<String, Map<String, dynamic>> _selectedReceipts = {};
   String _userRole = "User";
   String _userId = "";
@@ -55,11 +58,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Registra esta tela no RouteObserver
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
   @override
   void didPopNext() {
+    // Quando voltar para a tela, recarrega os recibos
     _loadFirstPage();
   }
 
@@ -98,9 +103,12 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       final sortedNames = tempMap.values.toList()..sort();
       _userMap = tempMap;
       _creatorList = ["Creator", ...sortedNames];
-    } catch (e) {}
+    } catch (e) {
+      // Trate erro se desejar
+    }
   }
 
+  /// Agora faz a leitura dos cartões no Firestore
   Future<void> _loadCardList() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -119,7 +127,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       setState(() {
         _cardList = ["Card", ...loaded];
       });
-    } catch (e) {}
+    } catch (e) {
+      // Em caso de erro, pode logar ou manter a lista original
+    }
   }
 
   Future<void> _loadFirstPage() async {
@@ -137,7 +147,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         _hasMore = false;
       }
       setState(() {});
-    } catch (e) {}
+    } catch (e) {
+      // Trate erro se desejar
+    }
   }
 
   Future<void> _loadMoreReceipts() async {
@@ -157,7 +169,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         _hasMore = false;
       }
       setState(() {});
-    } catch (e) {} finally {
+    } catch (e) {
+      // Trate erro se desejar
+    } finally {
       setState(() {
         _isLoadingMore = false;
       });
@@ -174,6 +188,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     return query;
   }
 
+  /// Aplica filtros localmente a partir da lista _allReceipts
   List<Map<String, dynamic>> _applyLocalFilters() {
     final List<Map<String, dynamic>> rawItems = [];
     for (var doc in _allReceipts) {
@@ -195,13 +210,17 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         'creatorName': creatorName,
       });
     }
+
     var items = List<Map<String, dynamic>>.from(rawItems);
+
     if (_selectedCreator != "Creator") {
       items = items.where((item) {
         final cName = item['creatorName'] as String;
         return cName == _selectedCreator;
       }).toList();
     }
+
+    // Filtra pelos 4 dígitos do cartão ("cardLast4")
     if (_selectedCard != "Card") {
       items = items.where((item) {
         final map = item['data'] as Map<String, dynamic>;
@@ -209,6 +228,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         return cardLast4 == _selectedCard;
       }).toList();
     }
+
     if (_selectedRange != null) {
       final start = _selectedRange!.start;
       final end = _selectedRange!.end;
@@ -219,6 +239,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             dt.isBefore(end.add(const Duration(days: 1)));
       }).toList();
     }
+
     items.sort((a, b) {
       final dtA = a['parsedDate'] as DateTime?;
       final dtB = b['parsedDate'] as DateTime?;
@@ -233,6 +254,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
 
   @override
   void dispose() {
+    // Cancele a inscrição no RouteObserver
     routeObserver.unsubscribe(this);
     _scrollController.dispose();
     super.dispose();
@@ -240,7 +262,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
-    final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
     final filteredItems = _applyLocalFilters();
     return BaseLayout(
       title: "Time Sheet",
@@ -251,7 +272,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             const SizedBox(height: 16),
             const Center(child: TitleBox(title: "Receipts")),
             const SizedBox(height: 20),
-            _buildTopBar(isMacOS),
+            _buildTopBar(),
             if (_showFilters) ...[
               const SizedBox(height: 20),
               _buildFilterContainer(context),
@@ -265,7 +286,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     );
   }
 
-  Widget _buildTopBar(bool isMacOS) {
+  Widget _buildTopBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
       child: Row(
@@ -275,7 +296,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             children: [
               CustomButton(
                 type: ButtonType.newButton,
-                onPressed: isMacOS ? null : _scanDocument,
+                onPressed: _scanDocument,
               ),
               const SizedBox(width: 20),
               if (_userRole == "Admin") ...[
