@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -10,12 +12,10 @@ import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_button_mini.dart';
-// Importe o RouteObserver global definido no main.dart
 import 'package:timesheet_app/main.dart';
 
 class ReceiptsScreen extends StatefulWidget {
   const ReceiptsScreen({Key? key}) : super(key: key);
-
   @override
   _ReceiptsScreenState createState() => _ReceiptsScreenState();
 }
@@ -27,11 +27,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   Map<String, String> _userMap = {};
   List<String> _creatorList = ["Creator"];
   String _selectedCreator = "Creator";
-
-  // Agora carrega a lista de cartões dinamicamente
   List<String> _cardList = ["Card"];
   String _selectedCard = "Card";
-
   final Map<String, Map<String, dynamic>> _selectedReceipts = {};
   String _userRole = "User";
   String _userId = "";
@@ -58,13 +55,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Registra esta tela no RouteObserver
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
   @override
   void didPopNext() {
-    // Quando voltar para a tela, recarrega os recibos
     _loadFirstPage();
   }
 
@@ -103,12 +98,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       final sortedNames = tempMap.values.toList()..sort();
       _userMap = tempMap;
       _creatorList = ["Creator", ...sortedNames];
-    } catch (e) {
-      // Trate erro se desejar
-    }
+    } catch (e) {}
   }
 
-  /// Agora faz a leitura dos cartões no Firestore
   Future<void> _loadCardList() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -127,9 +119,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       setState(() {
         _cardList = ["Card", ...loaded];
       });
-    } catch (e) {
-      // Em caso de erro, pode logar ou manter a lista original
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadFirstPage() async {
@@ -147,9 +137,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         _hasMore = false;
       }
       setState(() {});
-    } catch (e) {
-      // Trate erro se desejar
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadMoreReceipts() async {
@@ -170,7 +158,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       }
       setState(() {});
     } catch (e) {
-      // Trate erro se desejar
     } finally {
       setState(() {
         _isLoadingMore = false;
@@ -188,7 +175,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     return query;
   }
 
-  /// Aplica filtros localmente a partir da lista _allReceipts
   List<Map<String, dynamic>> _applyLocalFilters() {
     final List<Map<String, dynamic>> rawItems = [];
     for (var doc in _allReceipts) {
@@ -210,17 +196,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         'creatorName': creatorName,
       });
     }
-
     var items = List<Map<String, dynamic>>.from(rawItems);
-
     if (_selectedCreator != "Creator") {
       items = items.where((item) {
         final cName = item['creatorName'] as String;
         return cName == _selectedCreator;
       }).toList();
     }
-
-    // Filtra pelos 4 dígitos do cartão ("cardLast4")
     if (_selectedCard != "Card") {
       items = items.where((item) {
         final map = item['data'] as Map<String, dynamic>;
@@ -228,7 +210,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         return cardLast4 == _selectedCard;
       }).toList();
     }
-
     if (_selectedRange != null) {
       final start = _selectedRange!.start;
       final end = _selectedRange!.end;
@@ -239,7 +220,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             dt.isBefore(end.add(const Duration(days: 1)));
       }).toList();
     }
-
     items.sort((a, b) {
       final dtA = a['parsedDate'] as DateTime?;
       final dtB = b['parsedDate'] as DateTime?;
@@ -254,7 +234,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
 
   @override
   void dispose() {
-    // Cancele a inscrição no RouteObserver
     routeObserver.unsubscribe(this);
     _scrollController.dispose();
     super.dispose();
@@ -262,6 +241,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
     final filteredItems = _applyLocalFilters();
     return BaseLayout(
       title: "Time Sheet",
@@ -272,7 +252,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             const SizedBox(height: 16),
             const Center(child: TitleBox(title: "Receipts")),
             const SizedBox(height: 20),
-            _buildTopBar(),
+            _buildTopBar(isMacOS),
             if (_showFilters) ...[
               const SizedBox(height: 20),
               _buildFilterContainer(context),
@@ -286,7 +266,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(bool isMacOS) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 5),
       child: Row(
@@ -294,28 +274,27 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         children: [
           Row(
             children: [
-              CustomButton(
-                type: ButtonType.newButton,
-                onPressed: _scanDocument,
-              ),
+              if (!isMacOS) // Verifica se não está no macOS
+                CustomButton(
+                  type: ButtonType.newButton,
+                  onPressed: () => _scanDocument(),
+                ),
               const SizedBox(width: 20),
-              if (_userRole == "Admin") ...[
+              if (_userRole == "Admin")
                 CustomButton(
                   type: ButtonType.pdfButton,
                   onPressed: _selectedReceipts.isEmpty
                       ? () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("No receipts selected."),
-                            ),
+                                content: Text("No receipts selected.")),
                           );
                         }
                       : _generatePdf,
                 ),
-              ],
             ],
           ),
-          if (_userRole == "Admin") ...[
+          if (_userRole == "Admin")
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -345,13 +324,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                 Text(
                   "Selected: ${_selectedReceipts.length}",
                   style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      fontSize: 14, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
-          ],
         ],
       ),
     );
@@ -365,11 +341,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         color: const Color(0xFFF0F0FF),
         borderRadius: BorderRadius.circular(10),
         boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          )
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
         ],
       ),
       child: Column(
@@ -395,17 +367,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                       ? const Text(
                           "No date range",
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 15, fontWeight: FontWeight.bold),
                           maxLines: 1,
                         )
                       : Text(
                           "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                              fontSize: 15, fontWeight: FontWeight.bold),
                           maxLines: 1,
                         ),
                 ),
@@ -460,10 +428,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                       items: _creatorList.map((creator) {
                         return DropdownMenuItem<String>(
                           value: creator,
-                          child: Text(
-                            creator,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(creator, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                     ),
@@ -496,10 +461,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                       items: _cardList.map((cardLast4) {
                         return DropdownMenuItem<String>(
                           value: cardLast4,
-                          child: Text(
-                            cardLast4,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child:
+                              Text(cardLast4, overflow: TextOverflow.ellipsis),
                         );
                       }).toList(),
                     ),
@@ -560,11 +523,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
           color: isActive ? const Color(0xFF0205D3) : Colors.grey,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
   }
@@ -600,9 +559,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
             if (_hasMore && filteredItems.isNotEmpty) {
               return Container();
             } else {
-              return const Center(
-                child: Text("No more receipts."),
-              );
+              return const Center(child: Text("No more receipts."));
             }
           }
         }
@@ -623,22 +580,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         final imageUrl = map['imageUrl'] ?? '';
         return GestureDetector(
           onTap: () {
-            Navigator.pushNamed(
-              context,
-              '/receipt-viewer',
-              arguments: {
-                'imageUrl': imageUrl,
-              },
-            );
+            Navigator.pushNamed(context, '/receipt-viewer',
+                arguments: {'imageUrl': imageUrl});
           },
           child: Card(
             elevation: 3,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(
-                color: Color(0xFF0205D3),
-                width: 1,
-              ),
+              side: const BorderSide(color: Color(0xFF0205D3), width: 1),
             ),
             child: Column(
               children: [
@@ -646,22 +595,15 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                   child: imageUrl.isNotEmpty
                       ? ClipRRect(
                           borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(6),
-                            topRight: Radius.circular(6),
-                          ),
-                          child: Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                          ),
+                              topLeft: Radius.circular(6),
+                              topRight: Radius.circular(6)),
+                          child: Image.network(imageUrl,
+                              fit: BoxFit.cover, width: double.infinity),
                         )
                       : Container(
                           color: const Color(0xFFEEEEEE),
-                          child: const Icon(
-                            Icons.receipt_long,
-                            size: 32,
-                            color: Colors.grey,
-                          ),
+                          child: const Icon(Icons.receipt_long,
+                              size: 32, color: Colors.grey),
                         ),
                 ),
                 Padding(
@@ -670,26 +612,17 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        last4,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        creatorName,
-                        style: const TextStyle(fontSize: 10),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        amount,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.red,
-                        ),
-                      ),
+                      Text(last4,
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(creatorName,
+                          style: const TextStyle(fontSize: 10),
+                          overflow: TextOverflow.ellipsis),
+                      Text(amount,
+                          style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red)),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -697,25 +630,19 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                           RichText(
                             text: TextSpan(
                               style: const TextStyle(
-                                fontSize: 10,
-                                color: Colors.black,
-                              ),
+                                  fontSize: 10, color: Colors.black),
                               children: [
                                 TextSpan(
-                                  text: day,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
+                                    text: day,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14)),
                                 const TextSpan(text: " "),
                                 TextSpan(
-                                  text: month,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
-                                  ),
-                                ),
+                                    text: month,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12)),
                               ],
                             ),
                           ),
@@ -752,10 +679,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     final selected = await showDateRangePicker(
       context: context,
       initialDateRange: _selectedRange ??
-          DateTimeRange(
-            start: now.subtract(const Duration(days: 7)),
-            end: now,
-          ),
+          DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
@@ -771,39 +695,31 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       List<String>? scannedImages = await CunningDocumentScanner.getPictures();
       if (scannedImages != null && scannedImages.isNotEmpty) {
         String imagePath = scannedImages.first;
-        Navigator.pushNamed(
-          context,
-          '/preview-receipt',
-          arguments: {'imagePath': imagePath},
-        );
+        Navigator.pushNamed(context, '/preview-receipt',
+            arguments: {'imagePath': imagePath});
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("No document scanned.")),
-        );
+            const SnackBar(content: Text("No document scanned.")));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Scanning failed: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Scanning failed: $e")));
     }
   }
 
   Future<void> _generatePdf() async {
     if (_selectedReceipts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No receipt selected.")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("No receipt selected.")));
       return;
     }
     try {
       await ReceiptPdfService().generateReceiptsPdf(_selectedReceipts);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("PDF generated successfully!")),
-      );
+          const SnackBar(content: Text("PDF generated successfully!")));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error generating PDF: $e")),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text("Error generating PDF: $e")));
     }
   }
 
