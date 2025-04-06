@@ -5,6 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// Importa o arquivo de configuração gerado pelo FlutterFire CLI
+import 'firebase_options.dart';
+
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/new_user_screen.dart';
@@ -25,9 +28,12 @@ import 'services/update_service.dart';
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  // Inicializa o Firebase utilizando as opções apropriadas para a plataforma atual.
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -58,8 +64,8 @@ class MyApp extends StatelessWidget {
         '/receipts': (context) => const ReceiptsScreen(),
         '/preview-receipt': (context) => const PreviewReceiptScreen(),
         '/receipt-viewer': (context) {
-          final args =
-              ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+          final args = ModalRoute.of(context)?.settings.arguments
+              as Map<String, dynamic>?;
           final imageUrl = args?['imageUrl'] ?? '';
           return ReceiptViewerScreen(imageUrl: imageUrl);
         },
@@ -91,17 +97,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-
         final user = snapshot.data;
         if (user == null) {
           return const LoginScreen();
         }
-
         if (!_alreadyChecked) {
           _checkVersionAfterLogin();
           _alreadyChecked = true;
         }
-
         return const HomeScreen();
       },
     );
@@ -121,12 +124,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     final remoteVersion = remoteData['versionName'] ?? "0.0.0";
     final downloadUrl = remoteData['downloadUrl'] ?? "";
-    print(
-      "[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl",
-    );
+    print("[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl");
 
-    final isNewer =
-        _updateService.isRemoteVersionNewer(_localVersion, remoteVersion);
+    final isNewer = _updateService.isRemoteVersionNewer(_localVersion, remoteVersion);
     if (isNewer) {
       print("[AuthWrapperState] isNewer == true, showing popup");
       Future.microtask(() {
@@ -145,8 +145,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
         return AlertDialog(
           title: const Text("New version available"),
           content: Text(
-            "A new version ($remoteVersion) is available. "
-            "Your current version is $_localVersion. Update now?",
+            "A new version ($remoteVersion) is available. Your current version is $_localVersion. Update now?",
           ),
           actions: [
             TextButton(

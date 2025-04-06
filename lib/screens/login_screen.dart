@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:http/http.dart' as http; // Para checar internet
 import '../widgets/logo_text.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_input_field.dart';
@@ -12,15 +13,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // Controladores de texto
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  // Flags de erro local (se o campo estiver vazio)
   bool _showEmailError = false;
   bool _showPasswordError = false;
 
-  // Exibição de carregamento e mensagem de erro do Firebase
   bool _isLoading = false;
   String _errorMessage = '';
 
@@ -50,10 +48,31 @@ class _LoginScreenState extends State<LoginScreen> {
       );
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        _errorMessage = _getFirebaseErrorMessage(e.code);
-      });
-    } catch (_) {
+      // Loga no terminal do macOS/Android/etc.
+      print('Auth error code=${e.code}, message=${e.message}');
+
+      if (e.code == 'network-request-failed') {
+        // Tenta ver se realmente não há internet
+        final hasConnection = await _testInternetConnection();
+        if (!hasConnection) {
+          setState(() {
+            _errorMessage = 'No internet connection. Check your network.';
+          });
+        } else {
+          // Aparentemente tem internet, mas ainda deu "network-request-failed"
+          // Pode ser firewall / sandbox / horário do mac desatualizado, etc.
+          setState(() {
+            _errorMessage = 'Network request failed, but internet seems up.\n'
+                'Possibly firewall or sandbox blocking Firebase requests.';
+          });
+        }
+      } else {
+        // Se não for erro de rede, usamos o switch normal
+        setState(() {
+          _errorMessage = _getFirebaseErrorMessage(e.code);
+        });
+      }
+    } catch (e) {
       setState(() {
         _errorMessage = 'An unexpected error occurred. Try again.';
       });
@@ -75,14 +94,27 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'too-many-requests':
         return 'Too many attempts. Please wait and try again.';
       default:
-        return 'Login error. Check your credentials.';
+        return 'Login error. Check your credentials. ($errorCode)';
+    }
+  }
+
+  /// Teste simples de conectividade fazendo GET em "www.google.com"
+  /// Retorna `true` se statusCode==200, caso contrário `false`.
+  Future<bool> _testInternetConnection() async {
+    try {
+      final response = await http
+          .get(Uri.parse('https://www.google.com'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // NÃO usamos BaseLayout aqui, apenas um Scaffold normal
+      // Scaffold normal, não usamos BaseLayout aqui
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
@@ -125,17 +157,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
             const SizedBox(height: 30),
 
-            // Exibição de erro global do Firebase (ex.: user-not-found)
             if (_errorMessage.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
                   _errorMessage,
                   style: const TextStyle(color: Colors.red, fontSize: 14),
+                  textAlign: TextAlign.center,
                 ),
               ),
 
-            // Botão de login ou indicador de carregando
             _isLoading
                 ? const CircularProgressIndicator()
                 : CustomButton(

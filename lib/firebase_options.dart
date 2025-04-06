@@ -68,11 +68,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDNn5llSC7u1Hlq73t-G244TBYKUfcfxkY',
-    appId: '1:588817090632:ios:eea1834195700e4f78707d',
+    appId: '1:588817090632:ios:0fcfba70b3c17d2678707d',
     messagingSenderId: '588817090632',
     projectId: 'timesheet-app-d9700',
     storageBucket: 'timesheet-app-d9700.firebasestorage.app',
-    iosBundleId: 'com.centralislandfloors.timesheetApp.macos',
+    iosBundleId: 'com.centralislandfloors.timesheetApp.mac',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

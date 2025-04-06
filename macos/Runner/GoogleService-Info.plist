@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.centralislandfloors.timesheetApp.macos</string>
+	<string>com.centralislandfloors.timesheetApp.mac</string>
 	<key>PROJECT_ID</key>
 	<string>timesheet-app-d9700</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:588817090632:ios:eea1834195700e4f78707d</string>
+	<string>1:588817090632:ios:0fcfba70b3c17d2678707d</string>
 </dict>
 </plist>
