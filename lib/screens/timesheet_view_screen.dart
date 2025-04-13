@@ -1,12 +1,10 @@
-// lib/screens/timesheet_view_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
 import '../models/timesheet_data.dart';
-import '../widgets/custom_button_mini.dart'; // Import onde está CustomMiniButton
+import '../widgets/custom_button_mini.dart';
 
 class TimesheetViewScreen extends StatelessWidget {
   const TimesheetViewScreen({Key? key}) : super(key: key);
@@ -17,7 +15,6 @@ class TimesheetViewScreen extends StatelessWidget {
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final String docId =
         args != null && args.containsKey('docId') ? args['docId'] : '';
-
     return BaseLayout(
       title: "Timesheet",
       child: SingleChildScrollView(
@@ -27,8 +24,6 @@ class TimesheetViewScreen extends StatelessWidget {
           children: [
             const Center(child: TitleBox(title: "Timesheet")),
             const SizedBox(height: 20),
-
-            // Row com Back e Edit
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -60,12 +55,9 @@ class TimesheetViewScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 20),
-
-            // Se docId for vazio, mostra erro
             if (docId.isEmpty)
               const Text("Timesheet not found or empty ID.")
             else
-              // StreamBuilder p/ carregar o doc
               StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('timesheets')
@@ -122,10 +114,8 @@ class TimesheetViewScreen extends StatelessWidget {
 
                   return Column(
                     children: [
-                      // Layout do timesheet
                       _buildReviewLayout(timesheetData),
                       const SizedBox(height: 20),
-                      // MiniButton de Delete
                       CustomMiniButton(
                         type: MiniButtonType.deleteMiniButton,
                         onPressed: () => _confirmDelete(context, docId),
@@ -140,7 +130,6 @@ class TimesheetViewScreen extends StatelessWidget {
     );
   }
 
-  /// Método que mostra um AlertDialog de confirmação
   void _confirmDelete(BuildContext context, String docId) {
     showDialog(
       context: context,
@@ -152,12 +141,12 @@ class TimesheetViewScreen extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx), // Fecha apenas o dialog
+              onPressed: () => Navigator.pop(ctx),
               child: const Text("Cancel"),
             ),
             TextButton(
               onPressed: () {
-                Navigator.pop(ctx); // Fecha o dialog
+                Navigator.pop(ctx);
                 _deleteTimesheet(context, docId);
               },
               style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -169,19 +158,16 @@ class TimesheetViewScreen extends StatelessWidget {
     );
   }
 
-  /// Deleta o registro do Firestore
   Future<void> _deleteTimesheet(BuildContext context, String docId) async {
     try {
       await FirebaseFirestore.instance
           .collection('timesheets')
           .doc(docId)
           .delete();
-
-      // Mostra mensagem de sucesso e volta para a tela anterior
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Timesheet deleted successfully.")),
       );
-      Navigator.pop(context); // Sai desta tela (TimesheetViewScreen)
+      Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error deleting timesheet: $e")),
@@ -189,7 +175,6 @@ class TimesheetViewScreen extends StatelessWidget {
     }
   }
 
-  // --- Layout de exibição do timesheet (igual ao "Review") ---
   Widget _buildReviewLayout(TimesheetData data) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -376,8 +361,8 @@ class TimesheetViewScreen extends StatelessWidget {
   }
 
   Widget _buildLineMaterialRow(String label, String value) {
-    return SizedBox(
-      height: 52,
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -405,8 +390,8 @@ class TimesheetViewScreen extends StatelessWidget {
   }
 
   Widget _buildLineJobDesc(String label, String value) {
-    return SizedBox(
-      height: 52,
+    return Container(
+      constraints: const BoxConstraints(minHeight: 52),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -538,8 +523,6 @@ class TimesheetViewScreen extends StatelessWidget {
           ],
         ),
     ];
-
-    // Acrescenta 4 linhas vazias
     for (int i = 0; i < 4; i++) {
       rows.add(
         TableRow(
@@ -550,7 +533,6 @@ class TimesheetViewScreen extends StatelessWidget {
         ),
       );
     }
-
     return SizedBox(
       width: 290,
       child: Table(

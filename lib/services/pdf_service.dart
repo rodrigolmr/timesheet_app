@@ -118,15 +118,16 @@ class PdfService {
           _buildRow1Col("Job name:", jobName),
           _buildRow2Cols("Date:", date, "T. M.:", tm),
           _buildRow1Col("Job size:", jobSize),
-          _buildRow1Col("Material:", material),
-          _buildRow1Col("Job description:", jobDesc),
+          // Campos ajustados para Material e Job description
+          _buildRow1ColExpandable("Material:", material),
+          _buildRow1ColExpandable("Job description:", jobDesc),
           _buildRow2Cols("Foreman:", foreman, "Vehicle:", vehicle),
         ],
       ),
     );
   }
 
-  // Linhas com 22px (exceto timesheet e notes)
+  // Linhas com 22px (exceto os campos ajustáveis)
   pw.Widget _buildRow1Col(String label, String value) {
     return pw.Container(
       height: 22,
@@ -149,6 +150,28 @@ class PdfService {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Campos para Material e Job description com altura ajustável e textos centralizados verticalmente
+  pw.Widget _buildRow1ColExpandable(String label, String value) {
+    return pw.Container(
+      constraints: pw.BoxConstraints(minHeight: 22),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: PdfColors.black, width: 0.5),
+        ),
+      ),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8),
+      child: pw.Row(
+        crossAxisAlignment:
+            pw.CrossAxisAlignment.center, // Texto centralizado verticalmente
+        children: [
+          pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(width: 4),
+          pw.Expanded(child: pw.Text(value)),
         ],
       ),
     );
