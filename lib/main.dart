@@ -2,12 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
-
-// Importa o arquivo de configuração gerado pelo FlutterFire CLI
 import 'firebase_options.dart';
-
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/new_user_screen.dart';
@@ -30,16 +25,12 @@ final RouteObserver<ModalRoute<void>> routeObserver =
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Inicializa o Firebase utilizando as opções apropriadas para a plataforma atual.
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -77,7 +68,6 @@ class MyApp extends StatelessWidget {
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({Key? key}) : super(key: key);
-
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
@@ -85,7 +75,6 @@ class AuthWrapper extends StatefulWidget {
 class _AuthWrapperState extends State<AuthWrapper> {
   final UpdateService _updateService = UpdateService();
   bool _alreadyChecked = false;
-  String _localVersion = "0.0.0";
 
   @override
   Widget build(BuildContext context) {
@@ -94,8 +83,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+              body: Center(child: CircularProgressIndicator()));
         }
         final user = snapshot.data;
         if (user == null) {
@@ -111,70 +99,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkVersionAfterLogin() async {
-    print("[AuthWrapperState] _checkVersionAfterLogin called");
-    final info = await PackageInfo.fromPlatform();
-    _localVersion = info.version;
-    print("[AuthWrapperState] localVersion = $_localVersion");
-
-    final remoteData = await _updateService.fetchPlatformVersionInfo();
-    if (remoteData == null) {
-      print("[AuthWrapperState] remoteData == null, no update info found");
-      return;
-    }
-
-    final remoteVersion = remoteData['versionName'] ?? "0.0.0";
-    final downloadUrl = remoteData['downloadUrl'] ?? "";
-    print("[AuthWrapperState] remoteVersion = $remoteVersion, downloadUrl = $downloadUrl");
-
-    final isNewer = _updateService.isRemoteVersionNewer(_localVersion, remoteVersion);
-    if (isNewer) {
-      print("[AuthWrapperState] isNewer == true, showing popup");
-      Future.microtask(() {
-        _showUpdateDialog(remoteVersion, downloadUrl);
-      });
-    } else {
-      print("[AuthWrapperState] isNewer == false, no popup");
-    }
-  }
-
-  void _showUpdateDialog(String remoteVersion, String downloadUrl) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text("New version available"),
-          content: Text(
-            "A new version ($remoteVersion) is available. Your current version is $_localVersion. Update now?",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                print("[AuthWrapperState] User chose Later");
-                Navigator.pop(ctx);
-              },
-              child: const Text("Later"),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                print("[AuthWrapperState] User chose Update");
-                Navigator.pop(ctx);
-                _openUpdateLink(downloadUrl);
-              },
-              child: const Text("Update"),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _openUpdateLink(String url) async {
-    if (url.isNotEmpty) {
-      print("[AuthWrapperState] Opening update link: $url");
-      await launchUrl(Uri.parse(url));
-    } else {
-      print("[AuthWrapperState] No download URL provided");
-    }
+    await _updateService.checkForUpdate(context);
   }
 }
