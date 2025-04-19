@@ -2,7 +2,7 @@ name: timesheet_app
 description: "An app to manage the timesheets of Central Island Floors Inc."
 
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ^3.6.1
