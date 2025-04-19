@@ -28,7 +28,6 @@ class CustomMultilineInputField extends StatelessWidget {
     return Container(
       width: fieldWidth < 0 ? 0 : fieldWidth,
       height: 120,
-      // Error shadow (if needed)
       decoration: error
           ? BoxDecoration(
               boxShadow: [
@@ -45,6 +44,7 @@ class CustomMultilineInputField extends StatelessWidget {
         focusNode: focusNode,
         maxLines: null,
         expands: true,
+        textCapitalization: TextCapitalization.sentences,
         style: const TextStyle(
           fontSize: 16,
           color: Colors.black,
@@ -66,8 +66,7 @@ class CustomMultilineInputField extends StatelessWidget {
             fontWeight: FontWeight.bold,
             fontSize: 12,
             color: appBlueColor,
-            height:
-                0.8, // 🔥 This reduces the spacing between the label and text
+            height: 0.8,
           ),
           hintText: hintText,
           hintStyle: const TextStyle(
@@ -89,7 +88,7 @@ class CustomMultilineInputField extends StatelessWidget {
           errorStyle: const TextStyle(fontSize: 0, height: 0),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
-            vertical: 8, // Keeps text inside with proper spacing
+            vertical: 8,
           ),
         ),
       ),

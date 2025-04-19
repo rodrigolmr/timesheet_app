@@ -30,6 +30,7 @@ class CustomInputField extends StatelessWidget {
     const Color appBlueColor = Color(0xFF0205D3);
     const Color appYellowColor = Color(0xFFFFFDD0);
     final double fieldWidth = MediaQuery.of(context).size.width - 20;
+
     return Container(
       width: fieldWidth < 0 ? 0 : fieldWidth,
       height: 40,
@@ -49,6 +50,7 @@ class CustomInputField extends StatelessWidget {
         focusNode: focusNode,
         keyboardType: keyboardType,
         inputFormatters: inputFormatters,
+        textCapitalization: TextCapitalization.words,
         style: const TextStyle(
           fontSize: 16,
           color: Colors.black,
