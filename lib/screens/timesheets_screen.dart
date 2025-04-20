@@ -168,39 +168,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     });
   }
 
-  Future<void> _convertAllDatesToTimestamp() async {
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      final snap =
-          await FirebaseFirestore.instance.collection("timesheets").get();
-
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final dateValue = data["date"];
-
-        if (dateValue is String) {
-          try {
-            final parsedDate = DateFormat("M/d/yy, EEEE").parse(dateValue);
-            final docRef =
-                FirebaseFirestore.instance.collection("timesheets").doc(doc.id);
-            batch.update(docRef, {"date": Timestamp.fromDate(parsedDate)});
-          } catch (e) {
-            debugPrint("Erro ao converter '${doc.id}': $e");
-          }
-        }
-      }
-
-      await batch.commit();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Datas convertidas com sucesso!")),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erro ao atualizar datas: $e")),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoadingUser) {
@@ -215,16 +182,16 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           const SizedBox(height: 16),
           const Center(child: TitleBox(title: "Timesheets")),
           const SizedBox(height: 20),
-          _buildTopBar(),
+          _buildTopBarCentered(),
           Visibility(
-            visible: false, // definido como false para ocultar e colapsar
+            visible: false,
             replacement: const SizedBox.shrink(),
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0205D3),
                 foregroundColor: Colors.white,
               ),
-              onPressed: _convertAllDatesToTimestamp,
+              onPressed: () {},
               child: const Text("Corrigir datas das timesheets"),
             ),
           ),
@@ -233,7 +200,14 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
             _buildFilterContainer(context),
           ],
           Expanded(
-            child: _buildTimesheetListView(_timesheets),
+            child: Column(
+              children: [
+                const SizedBox(height: 20), // Espaço de 20 pixels acima do ListView
+                Expanded(
+                  child: _buildTimesheetListView(_timesheets),
+                ),
+              ],
+            ),
           ),
           if (_isLoading)
             const Padding(
@@ -247,74 +221,86 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBarCentered() {
+    final leftGroup = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        CustomButton(
+          type: ButtonType.newButton,
+          onPressed: () {
+            Navigator.pushNamed(context, '/new-time-sheet');
+          },
+        ),
+        const SizedBox(width: 20),
+        if (_userRole == "Admin")
+          CustomButton(
+            type: ButtonType.pdfButton,
+            onPressed: _selectedTimesheets.isEmpty
+                ? () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("No timesheet selected."),
+                      ),
+                    );
+                  }
+                : _generatePdf,
+          ),
+      ],
+    );
+
+    final rightGroup = _userRole == "Admin"
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  CustomMiniButton(
+                    type: MiniButtonType.sortMiniButton,
+                    onPressed: () {
+                      setState(() {
+                        _showFilters = !_showFilters;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  CustomMiniButton(
+                    type: MiniButtonType.selectAllMiniButton,
+                    onPressed: _handleSelectAll,
+                  ),
+                  const SizedBox(width: 4),
+                  CustomMiniButton(
+                    type: MiniButtonType.deselectAllMiniButton,
+                    onPressed: _handleDeselectAll,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                "Selected: ${_selectedTimesheets.length}",
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          )
+        : const SizedBox();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15),
       child: SizedBox(
         height: 60,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Row(
-              children: [
-                CustomButton(
-                  type: ButtonType.newButton,
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/new-time-sheet');
-                  },
-                ),
-                const SizedBox(width: 20),
-                if (_userRole == "Admin") ...[
-                  CustomButton(
-                    type: ButtonType.pdfButton,
-                    onPressed: _selectedTimesheets.isEmpty
-                        ? () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("No timesheet selected."),
-                              ),
-                            );
-                          }
-                        : _generatePdf,
-                  ),
-                ],
-              ],
+            leftGroup,
+            Flexible(
+              child: SizedBox(
+                width: 100, // Máximo de 100 pixels
+                child: const SizedBox.shrink(), // Espaço flexível
+              ),
             ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    CustomMiniButton(
-                      type: MiniButtonType.sortMiniButton,
-                      onPressed: () {
-                        setState(() {
-                          _showFilters = !_showFilters;
-                        });
-                      },
-                    ),
-                    const SizedBox(width: 4),
-                    CustomMiniButton(
-                      type: MiniButtonType.selectAllMiniButton,
-                      onPressed: _handleSelectAll,
-                    ),
-                    const SizedBox(width: 4),
-                    CustomMiniButton(
-                      type: MiniButtonType.deselectAllMiniButton,
-                      onPressed: _handleDeselectAll,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Selected: ${_selectedTimesheets.length}",
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+            rightGroup,
           ],
         ),
       ),
@@ -533,7 +519,8 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     final now = DateTime.now();
     final selected = await showDateRangePicker(
       context: context,
-      initialDateRange: _selectedRange ??
+      initialDateRange:
+          _selectedRange ??
           DateTimeRange(
             start: now.subtract(const Duration(days: 7)),
             end: now,
