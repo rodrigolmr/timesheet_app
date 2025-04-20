@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:intl/intl.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -42,7 +43,13 @@ class ReceiptViewerScreen extends StatelessWidget {
                 return Column(
                   children: [
                     // Exibir informações do recibo
-                    _buildInfoRow("Date:", data["date"] ?? "Not available"),
+                    _buildInfoRow(
+                      "Date:",
+                      data["date"] is Timestamp
+                          ? DateFormat("M/d/yy, EEEE")
+                              .format((data["date"] as Timestamp).toDate())
+                          : (data["date"]?.toString() ?? "Not available"),
+                    ),
                     _buildInfoRow("Amount:", data["amount"] ?? "Not available"),
                     _buildInfoRow(
                         "Description:", data["description"] ?? "Not available"),

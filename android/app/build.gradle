@@ -34,7 +34,7 @@ android {
         release {
             storeFile file("upload-keystore.jks")   // caminho do keystore
             storePassword "112358"                  // senha do keystore
-            keyAlias "minha_chave"                  // alias definido no keytool
+            keyAlias "minha_chave"                  // use o alias correto conforme o keytool
             keyPassword "112358"                    // senha da chave
         }
     }

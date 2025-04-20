@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -76,7 +77,14 @@ class TimesheetViewScreen extends StatelessWidget {
 
                   final doc = snapshot.data!;
                   final jobName = doc.get('jobName') ?? '';
-                  final date = doc.get('date') ?? '';
+                  final dateField = doc.get('date');
+                  String date;
+                  if (dateField is Timestamp) {
+                    date =
+                        DateFormat("M/d/yy, EEEE").format(dateField.toDate());
+                  } else {
+                    date = dateField.toString();
+                  }
                   final tm = doc.get('tm') ?? '';
                   final jobSize = doc.get('jobSize') ?? '';
                   final material = doc.get('material') ?? '';

@@ -7,6 +7,7 @@ class DatePickerInput extends StatefulWidget {
   final TextEditingController? controller;
   final bool error;
   final FocusNode? focusNode;
+  final void Function(DateTime?)? onDateSelected;
 
   const DatePickerInput({
     Key? key,
@@ -15,6 +16,7 @@ class DatePickerInput extends StatefulWidget {
     this.controller,
     this.error = false,
     this.focusNode,
+    this.onDateSelected,
   }) : super(key: key);
 
   @override
@@ -41,6 +43,9 @@ class _DatePickerInputState extends State<DatePickerInput> {
     if (picked != null) {
       setState(() {
         _localController.text = DateFormat('M/d/yy, EEEE').format(picked);
+        if (widget.onDateSelected != null) {
+          widget.onDateSelected!(picked);
+        }
       });
     }
   }
@@ -55,7 +60,6 @@ class _DatePickerInputState extends State<DatePickerInput> {
     return Container(
       width: fieldWidth < 0 ? 0 : fieldWidth,
       height: 40,
-      // Sombra vermelha clara se error == true
       decoration: widget.error
           ? BoxDecoration(
               boxShadow: [
@@ -71,10 +75,7 @@ class _DatePickerInputState extends State<DatePickerInput> {
         readOnly: true,
         controller: _localController,
         focusNode: widget.focusNode,
-        style: const TextStyle(
-          fontSize: 16,
-          color: Colors.black,
-        ),
+        style: const TextStyle(fontSize: 16, color: Colors.black),
         textAlignVertical: TextAlignVertical.center,
         onTap: () => _selectDate(context),
         decoration: InputDecoration(
@@ -107,10 +108,8 @@ class _DatePickerInputState extends State<DatePickerInput> {
           ),
           errorText: widget.error ? ' ' : null,
           errorStyle: const TextStyle(fontSize: 0, height: 0),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
-          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         ),
       ),
     );

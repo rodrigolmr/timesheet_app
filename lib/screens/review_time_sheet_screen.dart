@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -23,10 +24,31 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     try {
       final collection = FirebaseFirestore.instance.collection('timesheets');
       final userId = FirebaseAuth.instance.currentUser!.uid;
+
+      // Converter o campo "date" para Timestamp
+      final dynamic dateField = timesheetData.date;
+      late final Timestamp timestampDate;
+      if (dateField is String) {
+        try {
+          final DateTime parsedDate =
+              DateFormat("M/d/yy, EEEE").parse(dateField);
+          timestampDate = Timestamp.fromDate(parsedDate);
+        } catch (e) {
+          // Se ocorrer erro, usa o Timestamp atual
+          timestampDate = Timestamp.now();
+        }
+      } else if (dateField is DateTime) {
+        timestampDate = Timestamp.fromDate(dateField);
+      } else if (dateField is Timestamp) {
+        timestampDate = dateField;
+      } else {
+        timestampDate = Timestamp.now();
+      }
+
       if (editMode && docId.isNotEmpty) {
         await collection.doc(docId).update({
           'jobName': timesheetData.jobName,
-          'date': timesheetData.date,
+          'date': timestampDate,
           'tm': timesheetData.tm,
           'jobSize': timesheetData.jobSize,
           'material': timesheetData.material,
@@ -41,7 +63,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
       } else {
         await collection.add({
           'jobName': timesheetData.jobName,
-          'date': timesheetData.date,
+          'date': timestampDate,
           'tm': timesheetData.tm,
           'jobSize': timesheetData.jobSize,
           'material': timesheetData.material,

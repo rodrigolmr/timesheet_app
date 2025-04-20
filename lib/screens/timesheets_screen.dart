@@ -10,7 +10,6 @@ import '../widgets/custom_button.dart';
 import '../widgets/custom_button_mini.dart';
 import '../widgets/time_sheet_row.dart';
 import '../services/pdf_service.dart';
-// Importe o RouteObserver global definido no main.dart
 import 'package:timesheet_app/main.dart';
 
 class TimesheetsScreen extends StatefulWidget {
@@ -21,6 +20,12 @@ class TimesheetsScreen extends StatefulWidget {
 }
 
 class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
+  final ScrollController _scrollController = ScrollController();
+  List<DocumentSnapshot> _timesheets = [];
+  DocumentSnapshot? _lastDocument;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  final int _pageSize = 35;
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   List<String> _creatorList = ["Creator"];
@@ -28,17 +33,9 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   String _selectedCreator = "Creator";
   bool _isDescending = true;
   final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
-
   String? _userId;
   String? _userRole;
   bool _isLoadingUser = true;
-
-  final ScrollController _scrollController = ScrollController();
-  List<DocumentSnapshot> _allTimesheets = [];
-  DocumentSnapshot? _lastDoc;
-  bool _hasMore = true;
-  bool _isLoadingMore = false;
-  final int _pageSize = 15;
 
   @override
   void initState() {
@@ -46,23 +43,30 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     _getUserInfo();
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent * 0.9) {
+              _scrollController.position.maxScrollExtent * 0.9 &&
+          !_isLoading &&
+          _hasMore) {
         _loadMoreTimesheets();
       }
     });
   }
 
   @override
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Registra esta tela no RouteObserver
     routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
   @override
   void didPopNext() {
-    // Quando voltar para essa tela, recarrega a lista
-    _loadFirstPage();
+    _resetAndLoadFirstPage();
   }
 
   Future<void> _getUserInfo() async {
@@ -72,171 +76,129 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       return;
     }
     _userId = user.uid;
-
     final userDoc =
         await FirebaseFirestore.instance.collection('users').doc(_userId).get();
-    if (userDoc.exists) {
-      _userRole = userDoc.data()?['role'] ?? 'User';
+    if (userDoc.exists && userDoc.data()?['role'] != null) {
+      _userRole = userDoc.data()!['role'] as String;
     } else {
       _userRole = 'User';
     }
-
     await _loadCreators();
-
     setState(() {
       _isLoadingUser = false;
     });
-    _loadFirstPage();
+    _resetAndLoadFirstPage();
   }
 
   Future<void> _loadCreators() async {
-    try {
-      final snap = await FirebaseFirestore.instance.collection('users').get();
-      final Map<String, String> tempMap = {};
-      final List<String> loaded = [];
-      for (var doc in snap.docs) {
-        final data = doc.data();
-        final uid = doc.id;
-        final firstName = data["firstName"] ?? "";
-        final lastName = data["lastName"] ?? "";
-        final fullName = (firstName + " " + lastName).trim();
-        tempMap[uid] = fullName;
-        if (fullName.isNotEmpty) {
-          loaded.add(fullName);
-        }
+    final snap = await FirebaseFirestore.instance.collection('users').get();
+    final Map<String, String> tempMap = {};
+    final List<String> loaded = [];
+    for (var doc in snap.docs) {
+      final data = doc.data();
+      final uid = doc.id;
+      final fullName =
+          ((data["firstName"] ?? "") + " " + (data["lastName"] ?? "")).trim();
+      tempMap[uid] = fullName;
+      if (fullName.isNotEmpty) {
+        loaded.add(fullName);
       }
-      loaded.sort();
+    }
+    loaded.sort();
+    setState(() {
       _creatorList = ["Creator", ...loaded];
       _usersMap = tempMap;
-    } catch (e) {
-      // Trate erros se desejar
-    }
+    });
   }
 
-  /// Ajuste aqui se seus docs tiverem outro campo de data/hora.
   Query _getBaseQuery() {
     Query query = FirebaseFirestore.instance
         .collection("timesheets")
-        .orderBy("date", descending: true);
+        .orderBy("date", descending: _isDescending);
     if (_userRole != "Admin") {
       query = query.where("userId", isEqualTo: _userId);
+    } else if (_selectedCreator != "Creator") {
+      final uid = _usersMap.entries
+          .firstWhere((e) => e.value == _selectedCreator,
+              orElse: () => const MapEntry("", ""))
+          .key;
+      if (uid.isNotEmpty) {
+        query = query.where("userId", isEqualTo: uid);
+      }
+    }
+    if (_selectedRange != null) {
+      query = query
+          .where("date",
+              isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedRange!.start))
+          .where("date",
+              isLessThanOrEqualTo: Timestamp.fromDate(_selectedRange!.end));
     }
     return query;
   }
 
-  Future<void> _loadFirstPage() async {
-    try {
-      _allTimesheets.clear();
-      _lastDoc = null;
+  void _resetAndLoadFirstPage() async {
+    setState(() {
+      _timesheets.clear();
+      _lastDocument = null;
       _hasMore = true;
-
-      final snap = await _getBaseQuery().limit(_pageSize).get();
-      _allTimesheets.addAll(snap.docs);
-
-      if (snap.docs.isNotEmpty) {
-        _lastDoc = snap.docs.last;
-      }
-      if (snap.docs.length < _pageSize) {
-        _hasMore = false;
-      }
-
-      setState(() {});
-    } catch (e) {
-      // Trate erro se desejar
-    }
+    });
+    await _loadMoreTimesheets();
   }
 
   Future<void> _loadMoreTimesheets() async {
-    if (_isLoadingMore || !_hasMore || _lastDoc == null) return;
+    if (_isLoading || !_hasMore) return;
     setState(() {
-      _isLoadingMore = true;
+      _isLoading = true;
     });
+    Query query = _getBaseQuery().limit(_pageSize);
+    if (_lastDocument != null) {
+      query = query.startAfterDocument(_lastDocument!);
+    }
+    final snap = await query.get();
+    final docs = snap.docs;
+    if (docs.isNotEmpty) {
+      _lastDocument = docs.last;
+      _timesheets.addAll(docs);
+    }
+    if (docs.length < _pageSize) {
+      _hasMore = false;
+    }
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _convertAllDatesToTimestamp() async {
     try {
-      final snap = await _getBaseQuery()
-          .limit(_pageSize)
-          .startAfterDocument(_lastDoc!)
-          .get();
+      final batch = FirebaseFirestore.instance.batch();
+      final snap =
+          await FirebaseFirestore.instance.collection("timesheets").get();
 
-      _allTimesheets.addAll(snap.docs);
-      if (snap.docs.isNotEmpty) {
-        _lastDoc = snap.docs.last;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final dateValue = data["date"];
+
+        if (dateValue is String) {
+          try {
+            final parsedDate = DateFormat("M/d/yy, EEEE").parse(dateValue);
+            final docRef =
+                FirebaseFirestore.instance.collection("timesheets").doc(doc.id);
+            batch.update(docRef, {"date": Timestamp.fromDate(parsedDate)});
+          } catch (e) {
+            debugPrint("Erro ao converter '${doc.id}': $e");
+          }
+        }
       }
-      if (snap.docs.length < _pageSize) {
-        _hasMore = false;
-      }
-      setState(() {});
+
+      await batch.commit();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Datas convertidas com sucesso!")),
+      );
     } catch (e) {
-      // Trate erro se desejar
-    } finally {
-      setState(() {
-        _isLoadingMore = false;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao atualizar datas: $e")),
+      );
     }
-  }
-
-  List<Map<String, dynamic>> _applyLocalFilters() {
-    final List<Map<String, dynamic>> rawItems = [];
-    for (var doc in _allTimesheets) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
-      final docId = doc.id;
-      final rawDateString = data['date'] ?? '';
-      DateTime? parsedDate;
-      try {
-        parsedDate = DateFormat("M/d/yy, EEEE").parse(rawDateString);
-      } catch (_) {
-        parsedDate = null;
-      }
-      rawItems.add({
-        'docId': docId,
-        'data': data,
-        'parsedDate': parsedDate,
-      });
-    }
-
-    var items = List<Map<String, dynamic>>.from(rawItems);
-
-    // Filtro Creator
-    if (_userRole == "Admin" && _selectedCreator != "Creator") {
-      items = items.where((item) {
-        final mapData = item['data'] as Map<String, dynamic>;
-        final uid = mapData['userId'] ?? '';
-        final fullName = _usersMap[uid] ?? "";
-        return fullName == _selectedCreator;
-      }).toList();
-    }
-
-    // Filtro Range
-    if (_selectedRange != null) {
-      final start = _selectedRange!.start;
-      final end = _selectedRange!.end;
-      items = items.where((item) {
-        final dt = item['parsedDate'] as DateTime?;
-        if (dt == null) return false;
-        return dt.isAfter(start.subtract(const Duration(days: 1))) &&
-            dt.isBefore(end.add(const Duration(days: 1)));
-      }).toList();
-    }
-
-    // Ordena
-    items.sort((a, b) {
-      final dtA = a['parsedDate'] as DateTime?;
-      final dtB = b['parsedDate'] as DateTime?;
-      if (dtA == null && dtB == null) return 0;
-      if (dtA == null) return _isDescending ? 1 : -1;
-      if (dtB == null) return _isDescending ? -1 : 1;
-      final cmp = dtA.compareTo(dtB);
-      return _isDescending ? -cmp : cmp;
-    });
-
-    return items;
-  }
-
-  @override
-  void dispose() {
-    // Cancele a inscrição no RouteObserver
-    routeObserver.unsubscribe(this);
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -246,9 +208,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
         body: Center(child: CircularProgressIndicator()),
       );
     }
-
-    final filtered = _applyLocalFilters();
-
     return BaseLayout(
       title: "Timesheet",
       child: Column(
@@ -257,13 +216,32 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           const Center(child: TitleBox(title: "Timesheets")),
           const SizedBox(height: 20),
           _buildTopBar(),
+          Visibility(
+            visible: false, // definido como false para ocultar e colapsar
+            replacement: const SizedBox.shrink(),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0205D3),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: _convertAllDatesToTimestamp,
+              child: const Text("Corrigir datas das timesheets"),
+            ),
+          ),
           if (_showFilters) ...[
             const SizedBox(height: 20),
             _buildFilterContainer(context),
           ],
           Expanded(
-            child: _buildTimesheetListView(filtered),
+            child: _buildTimesheetListView(_timesheets),
           ),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: CircularProgressIndicator(),
+            ),
+          if (!_isLoading && !_hasMore && _timesheets.isEmpty)
+            const Center(child: Text("No timesheets found.")),
         ],
       ),
     );
@@ -355,7 +333,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -374,22 +351,13 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: _selectedRange == null
-                      ? const Text(
-                          "No date range",
+                      ? const Text("No date range",
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                        )
+                              fontSize: 15, fontWeight: FontWeight.bold))
                       : Text(
                           "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                        ),
+                              fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -399,6 +367,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                 onTap: () {
                   setState(() {
                     _isDescending = false;
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
@@ -409,6 +378,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                 onTap: () {
                   setState(() {
                     _isDescending = true;
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
@@ -432,6 +402,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                     if (value != null) {
                       setState(() {
                         _selectedCreator = value;
+                        _resetAndLoadFirstPage();
                       });
                     }
                   },
@@ -456,6 +427,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                     _selectedRange = null;
                     _selectedCreator = "Creator";
                     _isDescending = true;
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
@@ -464,6 +436,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                 onPressed: () {
                   setState(() {
                     _showFilters = false;
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
@@ -496,62 +469,32 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           color: isActive ? const Color(0xFF0205D3) : Colors.grey,
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(
-          icon,
-          color: Colors.white,
-          size: 20,
-        ),
+        child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
   }
 
-  Widget _buildTimesheetListView(List<Map<String, dynamic>> filtered) {
+  Widget _buildTimesheetListView(List<DocumentSnapshot> docs) {
     return ListView.builder(
       controller: _scrollController,
-      itemCount: filtered.length + 1,
+      itemCount: docs.length,
       itemBuilder: (context, index) {
-        if (index == filtered.length) {
-          if (_isLoadingMore) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: const [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 8),
-                    Text("Loading more timesheets..."),
-                  ],
-                ),
-              ),
-            );
-          } else {
-            if (_hasMore && filtered.isNotEmpty) {
-              return Container();
-            } else {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(8.0),
-                  child: Text("No more timesheets."),
-                ),
-              );
-            }
-          }
-        }
-
-        final item = filtered[index];
-        final docId = item['docId'] as String;
-        final mapData = item['data'] as Map<String, dynamic>;
-        final userId = mapData['userId'] ?? '';
+        final doc = docs[index];
+        final data = doc.data() as Map<String, dynamic>;
+        final docId = doc.id;
+        final userId = data['userId'] ?? '';
         final userName = _usersMap[userId] ?? "User";
-        final jobName = mapData['jobName'] ?? '';
-        final dtParsed = item['parsedDate'] as DateTime?;
+        final jobName = data['jobName'] ?? '';
+        final timestamp = data['date'] as Timestamp?;
+        final dtParsed = timestamp?.toDate();
+        final bool isChecked = _selectedTimesheets.containsKey(docId);
+
         String day = '--';
         String month = '--';
         if (dtParsed != null) {
           day = DateFormat('d').format(dtParsed);
           month = DateFormat('MMM').format(dtParsed);
         }
-        final bool isChecked = _selectedTimesheets.containsKey(docId);
 
         return Padding(
           key: ValueKey(docId),
@@ -573,7 +516,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               onCheckChanged: (checked) {
                 setState(() {
                   if (checked) {
-                    _selectedTimesheets[docId] = mapData;
+                    _selectedTimesheets[docId] = data;
                   } else {
                     _selectedTimesheets.remove(docId);
                   }
@@ -601,6 +544,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     if (selected != null) {
       setState(() {
         _selectedRange = selected;
+        _resetAndLoadFirstPage();
       });
     }
   }
@@ -625,14 +569,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   void _handleSelectAll() {
-    final filtered = _applyLocalFilters();
-    setState(() {
-      for (var item in filtered) {
-        final docId = item['docId'] as String;
-        final mapData = item['data'] as Map<String, dynamic>;
-        _selectedTimesheets[docId] = mapData;
-      }
-    });
+    for (var doc in _timesheets) {
+      final data = doc.data() as Map<String, dynamic>;
+      _selectedTimesheets[doc.id] = data;
+    }
+    setState(() {});
   }
 
   void _handleDeselectAll() {

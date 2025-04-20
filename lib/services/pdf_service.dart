@@ -3,6 +3,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class PdfService {
   Future<void> generateTimesheetPdf(
@@ -10,12 +12,24 @@ class PdfService {
     if (selectedTimesheets.isEmpty) {
       throw Exception("Nenhum timesheet selecionado!");
     }
+
     try {
       final pdf = pw.Document();
 
       selectedTimesheets.forEach((docId, data) {
         final jobName = data['jobName'] ?? '';
-        final date = data['date'] ?? '';
+
+        // ✅ CONVERSÃO SEGURA DO CAMPO "date"
+        final dynamic rawDate = data['date'];
+        String date = '';
+        if (rawDate is Timestamp) {
+          date = DateFormat("M/d/yy, EEEE").format(rawDate.toDate());
+        } else if (rawDate is DateTime) {
+          date = DateFormat("M/d/yy, EEEE").format(rawDate);
+        } else if (rawDate is String) {
+          date = rawDate;
+        }
+
         final tm = data['tm'] ?? '';
         final jobSize = data['jobSize'] ?? '';
         final material = data['material'] ?? '';
@@ -80,7 +94,6 @@ class PdfService {
     }
   }
 
-  // Timesheet: mantém altura 50
   pw.Widget _buildTitle() {
     return pw.Container(
       width: 500,
@@ -118,7 +131,6 @@ class PdfService {
           _buildRow1Col("Job name:", jobName),
           _buildRow2Cols("Date:", date, "T. M.:", tm),
           _buildRow1Col("Job size:", jobSize),
-          // Campos ajustados para Material e Job description
           _buildRow1ColExpandable("Material:", material),
           _buildRow1ColExpandable("Job description:", jobDesc),
           _buildRow2Cols("Foreman:", foreman, "Vehicle:", vehicle),
@@ -127,7 +139,6 @@ class PdfService {
     );
   }
 
-  // Linhas com 22px (exceto os campos ajustáveis)
   pw.Widget _buildRow1Col(String label, String value) {
     return pw.Container(
       height: 22,
@@ -155,7 +166,6 @@ class PdfService {
     );
   }
 
-  // Campos para Material e Job description com altura ajustável e textos centralizados verticalmente
   pw.Widget _buildRow1ColExpandable(String label, String value) {
     return pw.Container(
       constraints: pw.BoxConstraints(minHeight: 22),
@@ -166,8 +176,7 @@ class PdfService {
       ),
       padding: const pw.EdgeInsets.symmetric(horizontal: 8),
       child: pw.Row(
-        crossAxisAlignment:
-            pw.CrossAxisAlignment.center, // Texto centralizado verticalmente
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.Text(label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(width: 4),
@@ -217,7 +226,6 @@ class PdfService {
     );
   }
 
-  // Tabela também com linhas de 22px
   pw.Widget _buildTable(List<Map<String, dynamic>> workers) {
     final headers = ['Name', 'Start', 'Finish', 'Hours', 'Travel', 'Meal'];
     final data = workers.map((w) {
@@ -251,7 +259,6 @@ class PdfService {
           5: pw.FixedColumnWidth(60),
         },
         children: [
-          // Cabeçalho (22px de altura)
           pw.TableRow(
             children: headers.map((h) {
               return pw.Container(
@@ -264,7 +271,6 @@ class PdfService {
               );
             }).toList(),
           ),
-          // Linhas (22px de altura)
           ...data.map((row) {
             return pw.TableRow(
               children: row.map((cell) {
@@ -281,7 +287,6 @@ class PdfService {
     );
   }
 
-  // Note mantém formato flexível
   pw.Widget _buildNotes(String notes) {
     return pw.Container(
       width: 500,

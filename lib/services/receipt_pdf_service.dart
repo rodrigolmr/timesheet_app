@@ -3,6 +3,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ReceiptPdfService {
   /// Gera o PDF dos recibos, exibindo apenas as informações:
@@ -22,7 +24,13 @@ class ReceiptPdfService {
 
     for (final entry in selectedReceipts.entries) {
       final data = entry.value;
-      final date = data['date'] ?? '';
+      final dynamic rawDate = data['date'];
+      String date = '';
+      if (rawDate is Timestamp) {
+        date = DateFormat("M/d/yy, EEEE").format(rawDate.toDate());
+      } else if (rawDate is String) {
+        date = rawDate;
+      }
       final amount = data['amount']?.toString() ?? '';
       final description = data['description'] ?? '';
       final cardLabel = data['cardLabel'] ?? '';

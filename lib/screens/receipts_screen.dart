@@ -21,6 +21,14 @@ class ReceiptsScreen extends StatefulWidget {
 }
 
 class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
+  final ScrollController _scrollController = ScrollController();
+
+  List<DocumentSnapshot> _receipts = [];
+  DocumentSnapshot? _lastDocument;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  final int _pageSize = 15;
+
   bool _showFilters = false;
   DateTimeRange? _selectedRange;
   bool _isDescending = true;
@@ -32,12 +40,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   final Map<String, Map<String, dynamic>> _selectedReceipts = {};
   String _userRole = "User";
   String _userId = "";
-  final ScrollController _scrollController = ScrollController();
-  List<DocumentSnapshot> _allReceipts = [];
-  DocumentSnapshot? _lastDoc;
-  bool _hasMore = true;
-  bool _isLoadingMore = false;
-  final int _pageSize = 15;
 
   @override
   void initState() {
@@ -46,7 +48,9 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     _loadCardList();
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
-          _scrollController.position.maxScrollExtent * 0.9) {
+              _scrollController.position.maxScrollExtent * 0.9 &&
+          !_isLoading &&
+          _hasMore) {
         _loadMoreReceipts();
       }
     });
@@ -59,8 +63,10 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   }
 
   @override
-  void didPopNext() {
-    _loadFirstPage();
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _getUserInfo() async {
@@ -77,172 +83,117 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     }
     await _loadUsers();
     setState(() {});
-    _loadFirstPage();
+    _resetAndLoadFirstPage();
   }
 
   Future<void> _loadUsers() async {
-    try {
-      final snapshot =
-          await FirebaseFirestore.instance.collection('users').get();
-      final Map<String, String> tempMap = {};
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final userId = doc.id;
-        final firstName = data['firstName'] ?? '';
-        final lastName = data['lastName'] ?? '';
-        final fullName = (firstName + ' ' + lastName).trim();
-        if (fullName.isNotEmpty) {
-          tempMap[userId] = fullName;
-        }
+    final snapshot = await FirebaseFirestore.instance.collection('users').get();
+    final Map<String, String> tempMap = {};
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final fullName =
+          "${data['firstName'] ?? ''} ${data['lastName'] ?? ''}".trim();
+      if (fullName.isNotEmpty) {
+        tempMap[doc.id] = fullName;
       }
-      final sortedNames = tempMap.values.toList()..sort();
-      _userMap = tempMap;
-      _creatorList = ["Creator", ...sortedNames];
-    } catch (e) {}
+    }
+    _userMap = tempMap;
+    _creatorList = ["Creator", ...tempMap.values.toList()..sort()];
   }
 
   Future<void> _loadCardList() async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('cards')
-          .where('status', isEqualTo: 'ativo')
-          .get();
-      final List<String> loaded = [];
-      for (var doc in snap.docs) {
-        final data = doc.data();
-        final last4 = data['last4Digits']?.toString() ?? '';
-        if (last4.isNotEmpty) {
-          loaded.add(last4);
-        }
-      }
-      loaded.sort();
-      setState(() {
-        _cardList = ["Card", ...loaded];
-      });
-    } catch (e) {}
-  }
-
-  Future<void> _loadFirstPage() async {
-    try {
-      _allReceipts.clear();
-      _lastDoc = null;
-      _hasMore = true;
-      Query baseQuery = _getBaseQuery();
-      final snap = await baseQuery.limit(_pageSize).get();
-      _allReceipts.addAll(snap.docs);
-      if (snap.docs.isNotEmpty) {
-        _lastDoc = snap.docs.last;
-      }
-      if (snap.docs.length < _pageSize) {
-        _hasMore = false;
-      }
-      setState(() {});
-    } catch (e) {}
-  }
-
-  Future<void> _loadMoreReceipts() async {
-    if (_isLoadingMore || !_hasMore) return;
-    setState(() {
-      _isLoadingMore = true;
-    });
-    try {
-      Query baseQuery = _getBaseQuery();
-      final snap =
-          await baseQuery.limit(_pageSize).startAfterDocument(_lastDoc!).get();
-      _allReceipts.addAll(snap.docs);
-      if (snap.docs.isNotEmpty) {
-        _lastDoc = snap.docs.last;
-      }
-      if (snap.docs.length < _pageSize) {
-        _hasMore = false;
-      }
-      setState(() {});
-    } catch (e) {
-    } finally {
-      setState(() {
-        _isLoadingMore = false;
-      });
-    }
+    final snap = await FirebaseFirestore.instance
+        .collection('cards')
+        .where('status', isEqualTo: 'ativo')
+        .get();
+    final loaded = snap.docs
+        .map((doc) => doc.data()['last4Digits']?.toString() ?? '')
+        .where((last4) => last4.isNotEmpty)
+        .toList()
+      ..sort();
+    _cardList = ["Card", ...loaded];
   }
 
   Query _getBaseQuery() {
-    Query query = FirebaseFirestore.instance
-        .collection("receipts")
-        .orderBy("timestamp", descending: true);
+    Query query = FirebaseFirestore.instance.collection("receipts");
+
     if (_userRole != "Admin") {
       query = query.where("userId", isEqualTo: _userId);
     }
+
+    if (_userRole == "Admin" && _selectedCreator != "Creator") {
+      final userId = _userMap.entries
+          .firstWhere((entry) => entry.value == _selectedCreator,
+              orElse: () => const MapEntry("", ""))
+          .key;
+      if (userId.isNotEmpty) {
+        query = query.where("userId", isEqualTo: userId);
+      }
+    }
+
+    if (_selectedCard != "Card") {
+      query = query.where("cardLast4", isEqualTo: _selectedCard);
+    }
+
+    if (_selectedRange != null) {
+      query = query
+          .where("date",
+              isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedRange!.start))
+          .where("date",
+              isLessThanOrEqualTo: Timestamp.fromDate(_selectedRange!.end));
+    }
+
+    query = query.orderBy("date", descending: _isDescending);
+
     return query;
   }
 
-  List<Map<String, dynamic>> _applyLocalFilters() {
-    final List<Map<String, dynamic>> rawItems = [];
-    for (var doc in _allReceipts) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
-      final docId = doc.id;
-      final rawDateString = data['date'] ?? '';
-      DateTime? parsedDate;
-      try {
-        parsedDate = DateFormat("M/d/yy").parse(rawDateString);
-      } catch (_) {
-        parsedDate = null;
-      }
-      final uid = data['userId'] ?? '';
-      final creatorName = _userMap[uid] ?? '';
-      rawItems.add({
-        'docId': docId,
-        'data': data,
-        'parsedDate': parsedDate,
-        'creatorName': creatorName,
-      });
-    }
-    var items = List<Map<String, dynamic>>.from(rawItems);
-    if (_selectedCreator != "Creator") {
-      items = items.where((item) {
-        final cName = item['creatorName'] as String;
-        return cName == _selectedCreator;
-      }).toList();
-    }
-    if (_selectedCard != "Card") {
-      items = items.where((item) {
-        final map = item['data'] as Map<String, dynamic>;
-        final cardLast4 = map['cardLast4'] ?? '';
-        return cardLast4 == _selectedCard;
-      }).toList();
-    }
-    if (_selectedRange != null) {
-      final start = _selectedRange!.start;
-      final end = _selectedRange!.end;
-      items = items.where((item) {
-        final dt = item['parsedDate'] as DateTime?;
-        if (dt == null) return false;
-        return dt.isAfter(start.subtract(const Duration(days: 1))) &&
-            dt.isBefore(end.add(const Duration(days: 1)));
-      }).toList();
-    }
-    items.sort((a, b) {
-      final dtA = a['parsedDate'] as DateTime?;
-      final dtB = b['parsedDate'] as DateTime?;
-      if (dtA == null && dtB == null) return 0;
-      if (dtA == null) return _isDescending ? 1 : -1;
-      if (dtB == null) return _isDescending ? -1 : 1;
-      final cmp = dtA.compareTo(dtB);
-      return _isDescending ? -cmp : cmp;
+  void _resetAndLoadFirstPage() async {
+    setState(() {
+      _receipts.clear();
+      _lastDocument = null;
+      _hasMore = true;
     });
-    return items;
+    await _loadMoreReceipts();
   }
 
-  @override
-  void dispose() {
-    routeObserver.unsubscribe(this);
-    _scrollController.dispose();
-    super.dispose();
+  Future<void> _loadMoreReceipts() async {
+    if (_isLoading || !_hasMore) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      Query query = _getBaseQuery().limit(_pageSize);
+      if (_lastDocument != null) {
+        query = query.startAfterDocument(_lastDocument!);
+      }
+
+      final snap = await query.get();
+      final docs = snap.docs;
+
+      if (docs.isNotEmpty) {
+        _lastDocument = docs.last;
+        _receipts.addAll(docs);
+      }
+
+      if (docs.length < _pageSize) {
+        _hasMore = false;
+      }
+    } catch (e) {
+      debugPrint("Erro ao carregar recibos: $e");
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
-    final filteredItems = _applyLocalFilters();
+
     return BaseLayout(
       title: "Time Sheet",
       child: Padding(
@@ -257,9 +208,14 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
               const SizedBox(height: 20),
               _buildFilterContainer(context),
             ],
-            Expanded(
-              child: _buildReceiptsGrid(filteredItems),
-            ),
+            Expanded(child: _buildReceiptsGrid(_receipts)),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: CircularProgressIndicator(),
+              ),
+            if (!_isLoading && !_hasMore && _receipts.isEmpty)
+              const Center(child: Text("No receipts found.")),
           ],
         ),
       ),
@@ -274,22 +230,20 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         children: [
           Row(
             children: [
-              if (!isMacOS) // Verifica se não está no macOS
+              if (!isMacOS)
                 CustomButton(
                   type: ButtonType.newButton,
-                  onPressed: () => _scanDocument(),
+                  onPressed: _scanDocument,
                 ),
               const SizedBox(width: 20),
               if (_userRole == "Admin")
                 CustomButton(
                   type: ButtonType.pdfButton,
                   onPressed: _selectedReceipts.isEmpty
-                      ? () {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                      ? () => ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                                 content: Text("No receipts selected.")),
-                          );
-                        }
+                          )
                       : _generatePdf,
                 ),
             ],
@@ -302,11 +256,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                   children: [
                     CustomMiniButton(
                       type: MiniButtonType.sortMiniButton,
-                      onPressed: () {
-                        setState(() {
-                          _showFilters = !_showFilters;
-                        });
-                      },
+                      onPressed: () =>
+                          setState(() => _showFilters = !_showFilters),
                     ),
                     const SizedBox(width: 4),
                     CustomMiniButton(
@@ -345,7 +296,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
@@ -364,39 +314,32 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: _selectedRange == null
-                      ? const Text(
-                          "No date range",
+                      ? const Text("No date range",
                           style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                        )
+                              fontSize: 15, fontWeight: FontWeight.bold))
                       : Text(
                           "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
                           style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                        ),
+                              fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 8),
               _buildSquareArrowButton(
                 icon: Icons.arrow_upward,
                 isActive: !_isDescending,
-                onTap: () {
-                  setState(() {
-                    _isDescending = false;
-                  });
-                },
+                onTap: () => setState(() {
+                  _isDescending = false;
+                  _resetAndLoadFirstPage();
+                }),
               ),
               const SizedBox(width: 8),
               _buildSquareArrowButton(
                 icon: Icons.arrow_downward,
                 isActive: _isDescending,
-                onTap: () {
-                  setState(() {
-                    _isDescending = true;
-                  });
-                },
+                onTap: () => setState(() {
+                  _isDescending = true;
+                  _resetAndLoadFirstPage();
+                }),
               ),
             ],
           ),
@@ -422,6 +365,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                         if (newValue != null) {
                           setState(() {
                             _selectedCreator = newValue;
+                            _resetAndLoadFirstPage();
                           });
                         }
                       },
@@ -455,6 +399,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                         if (value != null) {
                           setState(() {
                             _selectedCard = value;
+                            _resetAndLoadFirstPage();
                           });
                         }
                       },
@@ -483,6 +428,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                     _isDescending = true;
                     _selectedCreator = "Creator";
                     _selectedCard = "Card";
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
@@ -491,16 +437,13 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                 onPressed: () {
                   setState(() {
                     _showFilters = false;
+                    _resetAndLoadFirstPage();
                   });
                 },
               ),
               CustomMiniButton(
                 type: MiniButtonType.closeMiniButton,
-                onPressed: () {
-                  setState(() {
-                    _showFilters = false;
-                  });
-                },
+                onPressed: () => setState(() => _showFilters = false),
               ),
             ],
           ),
@@ -528,10 +471,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     );
   }
 
-  Widget _buildReceiptsGrid(List<Map<String, dynamic>> filteredItems) {
-    if (filteredItems.isEmpty) {
+  Widget _buildReceiptsGrid(List<DocumentSnapshot> docs) {
+    if (docs.isEmpty) {
       return const Center(child: Text("No receipts found."));
     }
+
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -541,43 +485,27 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         mainAxisSpacing: 8,
         childAspectRatio: 0.7,
       ),
-      itemCount: filteredItems.length + 1,
+      itemCount: docs.length,
       itemBuilder: (context, index) {
-        if (index == filteredItems.length) {
-          if (_isLoadingMore) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 8),
-                  Text("Loading more receipts..."),
-                ],
-              ),
-            );
-          } else {
-            if (_hasMore && filteredItems.isNotEmpty) {
-              return Container();
-            } else {
-              return const Center(child: Text("No more receipts."));
-            }
-          }
-        }
-        final item = filteredItems[index];
-        final docId = item['docId'] as String;
-        final map = item['data'] as Map<String, dynamic>;
-        final creatorName = item['creatorName'] as String? ?? '';
-        final bool isChecked = _selectedReceipts.containsKey(docId);
-        final amount = map['amount']?.toString() ?? '';
-        final last4 = map['cardLast4']?.toString() ?? '0000';
-        final dt = item['parsedDate'] as DateTime?;
+        final doc = docs[index];
+        final data = doc.data() as Map<String, dynamic>;
+        final docId = doc.id;
+
+        final creatorName = _userMap[data['userId']] ?? '';
+        final amount = data['amount']?.toString() ?? '';
+        final last4 = data['cardLast4']?.toString() ?? '0000';
+        final imageUrl = data['imageUrl'] ?? '';
+        final date = (data['date'] as Timestamp?)?.toDate();
+
+        final isChecked = _selectedReceipts.containsKey(docId);
+
         String day = '--';
         String month = '--';
-        if (dt != null) {
-          day = DateFormat('d').format(dt);
-          month = DateFormat('MMM').format(dt);
+        if (date != null) {
+          day = DateFormat('d').format(date);
+          month = DateFormat('MMM').format(date);
         }
-        final imageUrl = map['imageUrl'] ?? '';
+
         return GestureDetector(
           onTap: () {
             Navigator.pushNamed(context, '/receipt-viewer',
@@ -651,7 +579,7 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
                             onChanged: (checked) {
                               setState(() {
                                 if (checked == true) {
-                                  _selectedReceipts[docId] = map;
+                                  _selectedReceipts[docId] = data;
                                 } else {
                                   _selectedReceipts.remove(docId);
                                 }
@@ -672,22 +600,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         );
       },
     );
-  }
-
-  Future<void> _pickDateRange(BuildContext context) async {
-    final now = DateTime.now();
-    final selected = await showDateRangePicker(
-      context: context,
-      initialDateRange: _selectedRange ??
-          DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (selected != null) {
-      setState(() {
-        _selectedRange = selected;
-      });
-    }
   }
 
   Future<void> _scanDocument() async {
@@ -724,19 +636,33 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   }
 
   void _handleSelectAll() {
-    final filtered = _applyLocalFilters();
-    setState(() {
-      for (var item in filtered) {
-        final docId = item['docId'] as String;
-        final map = item['data'] as Map<String, dynamic>;
-        _selectedReceipts[docId] = map;
-      }
-    });
+    for (var doc in _receipts) {
+      final data = doc.data() as Map<String, dynamic>;
+      _selectedReceipts[doc.id] = data;
+    }
+    setState(() {});
   }
 
   void _handleDeselectAll() {
     setState(() {
       _selectedReceipts.clear();
     });
+  }
+
+  Future<void> _pickDateRange(BuildContext context) async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
+      context: context,
+      initialDateRange: _selectedRange ??
+          DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected != null) {
+      setState(() {
+        _selectedRange = selected;
+        _resetAndLoadFirstPage();
+      });
+    }
   }
 }

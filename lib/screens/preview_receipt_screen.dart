@@ -1,12 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Para TextInputFormatter
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:path/path.dart' as p;
+import 'package:intl/intl.dart'; // Adicione esse import
 
-// Imports dos seus widgets:
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_input_field.dart';
@@ -15,7 +15,6 @@ import '../widgets/date_picker_input.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_dropdown_field.dart';
 
-/// USDCurrencyInputFormatter
 class USDCurrencyInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -23,9 +22,7 @@ class USDCurrencyInputFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     String digits = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.isEmpty) {
-      digits = '0';
-    }
+    if (digits.isEmpty) digits = '0';
     int value = int.parse(digits);
     double dollars = value / 100.0;
     String newText = "\$" + dollars.toStringAsFixed(2);
@@ -49,12 +46,9 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
   final TextEditingController _amountController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
 
+  DateTime? _selectedDate;
   bool _isUploading = false;
-
-  /// Lista dos cartões ativos: [ { 'last4': '1234', 'cardholderName': 'Fulano' }, ... ]
   List<Map<String, String>> _activeCards = [];
-
-  /// Valor selecionado no dropdown (ex: "1234 - Fulano")
   String? _selectedCardOption;
 
   @override
@@ -63,7 +57,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
     _loadActiveCards();
   }
 
-  /// Carrega todos os cartões com status=ativo na coleção 'cards'
   Future<void> _loadActiveCards() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -105,17 +98,15 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
           children: [
             const Center(child: TitleBox(title: "New Receipt")),
             const SizedBox(height: 20),
-            // Dropdown para selecionar o cartão (last4 e nome)
             _buildCardLast4Dropdown(),
             const SizedBox(height: 16),
-            // Purchase date
             DatePickerInput(
               label: "Purchase date",
               hintText: "Select purchase date",
               controller: _dateController,
+              onDateSelected: (picked) => _selectedDate = picked,
             ),
             const SizedBox(height: 16),
-            // Amount
             CustomInputField(
               label: "Amount",
               hintText: "\$0.00",
@@ -125,14 +116,12 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               inputFormatters: [USDCurrencyInputFormatter()],
             ),
             const SizedBox(height: 16),
-            // Description
             CustomMultilineInputField(
               label: "Description",
               hintText: "Description of the purchase",
               controller: _descriptionController,
             ),
             const SizedBox(height: 20),
-            // Botões
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -153,7 +142,16 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            // Imagem capturada
+            Visibility(
+              visible:
+                  false, // Define como false para ocultar o botão e colapsá-lo
+              replacement: const SizedBox.shrink(),
+              child: ElevatedButton(
+                onPressed: _convertDatesToTimestamps,
+                child: const Text("Converter Datas para Timestamp"),
+              ),
+            ),
+            const SizedBox(height: 20),
             if (imagePath != null && imagePath.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -175,6 +173,43 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
     );
   }
 
+  Future<void> _convertDatesToTimestamps() async {
+    try {
+      final collection = FirebaseFirestore.instance.collection('receipts');
+      final querySnapshot = await collection.get();
+
+      // Define o formatador para "M/d/yy" (exemplo: "4/12/25")
+      final DateFormat formatter = DateFormat("M/d/yy");
+
+      for (final doc in querySnapshot.docs) {
+        final data = doc.data();
+        final dateField = data['date'];
+
+        // Verifica se o campo 'date' é String
+        if (dateField is String) {
+          // Separa o dia, usando apenas a parte antes da vírgula
+          final String dateToParse = dateField.split(',')[0];
+          try {
+            DateTime parsedDate = formatter.parse(dateToParse);
+            final Timestamp timestamp = Timestamp.fromDate(parsedDate);
+            // Atualiza o documento com o valor convertido
+            await doc.reference.update({'date': timestamp});
+          } catch (e) {
+            print("Erro ao converter data para doc ${doc.id}: $e");
+          }
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Datas convertidas com sucesso!")),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Falha ao converter datas: $e")),
+      );
+    }
+  }
+
   Widget _buildCardLast4Dropdown() {
     final List<String> dropdownItems = _activeCards.isNotEmpty
         ? _activeCards.map((map) {
@@ -194,7 +229,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
           _selectedCardOption = newValue;
           if (newValue != null && newValue.contains(' - ')) {
             final parts = newValue.split(' - ');
-            _cardLast4Controller.text = parts[0]; // "1234"
+            _cardLast4Controller.text = parts[0];
           } else {
             _cardLast4Controller.clear();
           }
@@ -205,7 +240,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
 
   void _attemptUpload(String? imagePath) {
     if (_cardLast4Controller.text.trim().isEmpty ||
-        _dateController.text.trim().isEmpty ||
+        _selectedDate == null ||
         _amountController.text.trim().isEmpty ||
         imagePath == null ||
         imagePath.isEmpty) {
@@ -236,7 +271,7 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
       await FirebaseFirestore.instance.collection("receipts").add({
         "userId": user.uid,
         "cardLast4": _cardLast4Controller.text.trim(),
-        "date": _dateController.text.trim(),
+        "date": Timestamp.fromDate(_selectedDate!),
         "amount": _amountController.text.trim(),
         "description": _descriptionController.text.trim(),
         "imageUrl": imageUrl,
@@ -247,7 +282,6 @@ class _PreviewReceiptScreenState extends State<PreviewReceiptScreen> {
         const SnackBar(content: Text("Receipt uploaded successfully!")),
       );
 
-      // Redireciona para a tela de Receipts após o upload
       Navigator.pushNamedAndRemoveUntil(
         context,
         '/receipts',
