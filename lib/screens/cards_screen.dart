@@ -1,5 +1,5 @@
-// lib/screens/cards_screen.dart
-
+import 'dart:io'; // Para verificar se está em macOS
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../widgets/base_layout.dart';
@@ -22,6 +22,10 @@ class _CardsScreenState extends State<CardsScreen> {
   final TextEditingController _last4DigitsController = TextEditingController();
 
   String _statusFilter = "all"; // "all", "active", "inactive"
+
+  // Lógica de redimensionamento (similar ao receipts_screen)
+  bool _showCardSizeSlider = false;
+  double _maxCardWidth = 250;
 
   void _handleAddCard() {
     setState(() {
@@ -115,7 +119,7 @@ class _CardsScreenState extends State<CardsScreen> {
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFFDD0),
                       border: Border.all(
-                        color: Color(0xFF0205D3),
+                        color: const Color(0xFF0205D3),
                         width: 2,
                       ),
                       borderRadius: BorderRadius.circular(4),
@@ -188,6 +192,7 @@ class _CardsScreenState extends State<CardsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
     return BaseLayout(
       title: "Cards",
       child: SingleChildScrollView(
@@ -197,14 +202,21 @@ class _CardsScreenState extends State<CardsScreen> {
             const TitleBox(title: "Company Cards"),
             const SizedBox(height: 20),
 
-            // Botão Add Card ou formulário
-            if (!_showForm)
-              CustomButton(
-                type: ButtonType.addWorkerButton, // Podemos reaproveitar "Add"
-                onPressed: _handleAddCard,
-              )
-            else
-              _buildAddCardForm(),
+            // Top bar (Add + Columns se macOS)
+            _buildTopBar(isMacOS),
+
+            // Se estiver no macOS e showCardSizeSlider = true, exibir caixa com slider
+            if (isMacOS && _showCardSizeSlider) ...[
+              // Espaçamento extra semelhante ao do form
+              const SizedBox(height: 20),
+              _buildSliderForMacOS(),
+            ],
+
+            // Se _showForm = true, exibe o formulário
+            if (_showForm) ...[
+              const SizedBox(height: 20),
+              _buildAddCardForm(isMacOS),
+            ],
 
             const SizedBox(height: 20),
 
@@ -249,6 +261,7 @@ class _CardsScreenState extends State<CardsScreen> {
                 ),
               ),
             ),
+
             const SizedBox(height: 20),
 
             // Exibição da grade de cartões
@@ -294,65 +307,7 @@ class _CardsScreenState extends State<CardsScreen> {
 
                 return Container(
                   width: containerWidth < 0 ? 0 : containerWidth,
-                  child: GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredDocs.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 2.5,
-                    ),
-                    itemBuilder: (context, index) {
-                      final docData =
-                          filteredDocs[index].data() as Map<String, dynamic>;
-                      final docId = filteredDocs[index].id;
-                      final cardholderName = docData['cardholderName'] ?? '';
-                      final last4 = docData['last4Digits'] ?? '';
-                      final status = docData['status'] ?? 'ativo';
-
-                      return GestureDetector(
-                        onTap: () {
-                          _showStatusDialog(
-                            docId,
-                            cardholderName,
-                            last4,
-                            status,
-                          );
-                        },
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFFFD0),
-                            border: Border.all(
-                              color: const Color(0xFF0205D3),
-                              width: 2,
-                            ),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
-                              ),
-                              child: Text(
-                                '$cardholderName\n($last4)',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildCardsGrid(filteredDocs),
                 );
               },
             ),
@@ -362,37 +317,181 @@ class _CardsScreenState extends State<CardsScreen> {
     );
   }
 
-  /// Formulário para cadastrar o cartão
-  Widget _buildAddCardForm() {
-    return Column(
+  /// Top bar contendo Add e Columns (somente macOS)
+  Widget _buildTopBar(bool isMacOS) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        CustomInputField(
-          label: "Cardholder Name",
-          hintText: "Enter cardholder name",
-          controller: _cardholderNameController,
+        // Botão Add (abriu, remove o outro "Add" do código)
+        CustomButton(
+          type: ButtonType.addWorkerButton,
+          onPressed: _handleAddCard,
         ),
-        const SizedBox(height: 10),
-        CustomInputField(
-          label: "Last 4 digits",
-          hintText: "Enter last 4 digits",
-          controller: _last4DigitsController,
-        ),
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CustomMiniButton(
-              type: MiniButtonType.cancelMiniButton,
-              onPressed: _handleCancel,
-            ),
-            const SizedBox(width: 10),
-            CustomMiniButton(
-              type: MiniButtonType.saveMiniButton,
-              onPressed: _handleSave,
-            ),
+        // Botão Columns caso seja macOS
+        if (isMacOS) ...[
+          const SizedBox(width: 20),
+          CustomButton(
+            type: ButtonType.columnsButton,
+            onPressed: () {
+              setState(() {
+                _showCardSizeSlider = !_showCardSizeSlider;
+              });
+            },
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Exibe slider (no macOS) para ajustar a largura,
+  /// agora com ConstrainedBox limitando a 600px e
+  /// espaçamento extra igual ao do "Add".
+  Widget _buildSliderForMacOS() {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F0FF),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
           ],
         ),
-      ],
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Card Size:",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            const Text("Min"),
+            SizedBox(
+              width: 150,
+              child: Slider(
+                value: _maxCardWidth,
+                min: 150,
+                max: 600,
+                divisions: 45,
+                onChanged: (double value) {
+                  setState(() {
+                    _maxCardWidth = value;
+                  });
+                },
+              ),
+            ),
+            const Text("Max"),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Constrói a grid de cartões (usamos SliverGridDelegate condicional)
+  Widget _buildCardsGrid(List<DocumentSnapshot> docs) {
+    final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
+    final gridDelegate =
+        (defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS)
+            ? const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.5,
+              )
+            : SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: _maxCardWidth,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.5,
+              );
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: docs.length,
+      gridDelegate: gridDelegate,
+      itemBuilder: (context, index) {
+        final docData = docs[index].data() as Map<String, dynamic>;
+        final docId = docs[index].id;
+        final cardholderName = docData['cardholderName'] ?? '';
+        final last4 = docData['last4Digits'] ?? '';
+        final status = docData['status'] ?? 'ativo';
+
+        return GestureDetector(
+          onTap: () {
+            _showStatusDialog(docId, cardholderName, last4, status);
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFFD0),
+              border: Border.all(
+                color: const Color(0xFF0205D3),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(5),
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
+                child: Text(
+                  '$cardholderName\n($last4)',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Formulário para cadastrar o cartão
+  Widget _buildAddCardForm(bool isMacOS) {
+    final double fieldMaxWidth = isMacOS ? 600 : double.infinity;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: fieldMaxWidth),
+      child: Column(
+        children: [
+          CustomInputField(
+            label: "Cardholder Name",
+            hintText: "Enter cardholder name",
+            controller: _cardholderNameController,
+          ),
+          const SizedBox(height: 10),
+          CustomInputField(
+            label: "Last 4 digits",
+            hintText: "Enter last 4 digits",
+            controller: _last4DigitsController,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CustomMiniButton(
+                type: MiniButtonType.cancelMiniButton,
+                onPressed: _handleCancel,
+              ),
+              const SizedBox(width: 10),
+              CustomMiniButton(
+                type: MiniButtonType.saveMiniButton,
+                onPressed: _handleSave,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

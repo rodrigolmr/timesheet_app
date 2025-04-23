@@ -9,7 +9,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     // Ajuste do tamanho mínimo
-    self.minSize = NSSize(width: 600, height: 600)
+    self.minSize = NSSize(width: 600, height: 800)
 
     // Registro dos plugins
     RegisterGeneratedPlugins(registry: flutterViewController)

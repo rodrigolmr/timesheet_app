@@ -37,7 +37,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   final Map<String, Map<String, dynamic>> _selectedReceipts = {};
   String _userRole = "User";
   String _userId = "";
-
   bool _showCardSizeSlider = false;
   double _maxCardWidth = 250;
 
@@ -179,6 +178,23 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     }
   }
 
+  // Função para exibir apenas "PrimeiroNome + InicialDoUltimoNome."
+  String _shortenName(String fullName) {
+    if (fullName.trim().isEmpty) return '';
+    final parts = fullName.trim().split(' ');
+    final firstName = parts[0];
+    if (parts.length > 1) {
+      // última parte do nome (último sobrenome)
+      final lastName = parts[parts.length - 1];
+      final lastInitial = lastName.isNotEmpty
+          ? lastName.substring(0, 1).toUpperCase()
+          : '';
+      return '$firstName $lastInitial.';
+    } else {
+      return firstName; // se não houver sobrenome, mostra só o primeiro nome
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
@@ -256,7 +272,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
   }
 
   Widget _buildTopBarCentered(bool isMacOS) {
-    // Grupo da esquerda (botões do Mac / Admin + New e PDF)
     final leftGroup = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -288,7 +303,6 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       ],
     );
 
-    // Grupo da direita (botões do Admin + contagem de selecionados)
     final rightGroup = _userRole == "Admin"
         ? Column(
             mainAxisSize: MainAxisSize.min,
@@ -320,17 +334,11 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
           )
         : const SizedBox();
 
-    // Montamos um Row central, com um Flexible SizedBox entre os dois grupos
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         leftGroup,
-        Flexible(
-          child: SizedBox(
-            width: 100, // Máximo de 100 pixels
-            child: const SizedBox.shrink(), // Espaço flexível
-          ),
-        ),
+        const SizedBox(width: 50),
         rightGroup,
       ],
     );
@@ -530,21 +538,37 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
       return const Center(child: Text("No receipts found."));
     }
 
+    final gridDelegate =
+        (defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS)
+            ? const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.62,
+              )
+            : SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: _maxCardWidth,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.62,
+              );
+
     return GridView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(vertical: 8),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: _maxCardWidth,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 0.62,
-      ),
+      gridDelegate: gridDelegate,
       itemCount: docs.length,
       itemBuilder: (context, index) {
         final doc = docs[index];
         final data = doc.data() as Map<String, dynamic>;
         final docId = doc.id;
-        final creatorName = _userMap[data['userId']] ?? '';
+
+        // Nome completo do usuário
+        final fullName = _userMap[data['userId']] ?? '';
+        // Usando a função shortenName para exibir apenas "PrimeiroNome Inicial."
+        final shortenedName = _shortenName(fullName);
+
         final amount = data['amount']?.toString() ?? '';
         final last4 = data['cardLast4']?.toString() ?? '0000';
         final imageUrl = data['imageUrl'] ?? '';
@@ -562,131 +586,142 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
           builder: (context, constraints) {
             final double baseWidth = 220;
             final double scale = constraints.maxWidth / baseWidth;
-            final double last4FontSize = (isMacOS ? 22 : 20) * scale;
-            final double creatorFontSize = (isMacOS ? 14 : 12) * scale;
-            final double amountFontSize = (isMacOS ? 28 : 26) * scale;
-            final double dayFontSize = (isMacOS ? 24 : 22) * scale;
-            final double monthFontSize = (isMacOS ? 20 : 18) * scale;
+            final double last4FontSize = (isMacOS ? 22 : 22) * scale;
+            final double creatorFontSize = (isMacOS ? 14 : 18) * scale;
+            final double amountFontSize = (isMacOS ? 28 : 30) * scale;
+            final double dayFontSize = (isMacOS ? 24 : 26) * scale;
+            final double monthFontSize = (isMacOS ? 20 : 22) * scale;
 
-            return Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: Color(0xFF0205D3), width: 1),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(6),
-                      topRight: Radius.circular(6),
+            return GestureDetector(
+              onTap: () {
+                Navigator.pushNamed(
+                  context,
+                  '/receipt-viewer',
+                  arguments: {'imageUrl': imageUrl},
+                );
+              },
+              child: Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Color(0xFF0205D3), width: 1),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(6),
+                        topRight: Radius.circular(6),
+                      ),
+                      child: AspectRatio(
+                        aspectRatio: 16 / 15,
+                        child: imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                              )
+                            : Container(
+                                color: const Color(0xFFEEEEEE),
+                                child: const Icon(Icons.receipt_long, size: 32, color: Colors.grey),
+                              ),
+                      ),
                     ),
-                    child: AspectRatio(
-                      aspectRatio: 16 / 15,
-                      child: imageUrl.isNotEmpty
-                          ? Image.network(
-                              imageUrl,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            )
-                          : Container(
-                              color: const Color(0xFFEEEEEE),
-                              child: const Icon(Icons.receipt_long, size: 32, color: Colors.grey),
-                            ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        AspectRatio(
-                          aspectRatio: 5 / 1,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                last4,
-                                style: TextStyle(
-                                  fontSize: last4FontSize,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                creatorName,
-                                style: TextStyle(fontSize: creatorFontSize),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        AspectRatio(
-                          aspectRatio: 4 / 1,
-                          child: Center(
-                            child: Text(
-                              amount,
-                              style: TextStyle(
-                                fontSize: amountFontSize,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        AspectRatio(
-                          aspectRatio: 5 / 1,
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              RichText(
-                                text: TextSpan(
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AspectRatio(
+                            aspectRatio: 5 / 1,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  last4,
                                   style: TextStyle(
-                                    fontSize: 10 * scale,
-                                    color: Colors.black,
+                                    fontSize: last4FontSize,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  children: [
-                                    TextSpan(
-                                      text: day,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: dayFontSize,
-                                      ),
-                                    ),
-                                    const TextSpan(text: " "),
-                                    TextSpan(
-                                      text: month,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: monthFontSize,
-                                      ),
-                                    ),
-                                  ],
+                                ),
+                                // Exibe aqui o shortenedName
+                                Text(
+                                  shortenedName, 
+                                  style: TextStyle(fontSize: creatorFontSize),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          AspectRatio(
+                            aspectRatio: 4 / 1,
+                            child: Center(
+                              child: Text(
+                                amount,
+                                style: TextStyle(
+                                  fontSize: amountFontSize,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red,
                                 ),
                               ),
-                              Checkbox(
-                                value: isChecked,
-                                onChanged: (checked) {
-                                  setState(() {
-                                    if (checked == true) {
-                                      _selectedReceipts[docId] = data;
-                                    } else {
-                                      _selectedReceipts.remove(docId);
-                                    }
-                                  });
-                                },
-                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          AspectRatio(
+                            aspectRatio: 5 / 1,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                RichText(
+                                  text: TextSpan(
+                                    style: TextStyle(
+                                      fontSize: 10 * scale,
+                                      color: Colors.black,
+                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: day,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: dayFontSize,
+                                        ),
+                                      ),
+                                      const TextSpan(text: " "),
+                                      TextSpan(
+                                        text: month,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: monthFontSize,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Checkbox(
+                                  value: isChecked,
+                                  onChanged: (checked) {
+                                    setState(() {
+                                      if (checked == true) {
+                                        _selectedReceipts[docId] = data;
+                                      } else {
+                                        _selectedReceipts.remove(docId);
+                                      }
+                                    });
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -703,8 +738,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
         Navigator.pushNamed(context, '/preview-receipt',
             arguments: {'imagePath': imagePath});
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text("No document scanned.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("No document scanned.")));
       }
     } catch (e) {
       ScaffoldMessenger.of(context)
@@ -746,7 +781,8 @@ class _ReceiptsScreenState extends State<ReceiptsScreen> with RouteAware {
     final now = DateTime.now();
     final selected = await showDateRangePicker(
       context: context,
-      initialDateRange: _selectedRange ??
+      initialDateRange:
+          _selectedRange ??
           DateTimeRange(start: now.subtract(const Duration(days: 7)), end: now),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),

@@ -23,22 +23,28 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
       TimesheetData timesheetData, bool editMode, String docId) async {
     try {
       final collection = FirebaseFirestore.instance.collection('timesheets');
-      final userId = FirebaseAuth.instance.currentUser!.uid;
 
-      // Converter o campo "date" para Timestamp
-      final dynamic dateField = timesheetData.date;
-      late final Timestamp timestampDate;
-      if (dateField is String) {
+      // Se timesheetData.userId existir, mantém;
+      // senão, pega do usuário logado.
+      final String finalUserId = timesheetData.userId.isNotEmpty
+          ? timesheetData.userId
+          : FirebaseAuth.instance.currentUser!.uid;
+
+      // Converter "date" em Timestamp
+      Timestamp timestampDate;
+      final dynamic dateField = timesheetData.date; // Pode ser String, DateTime, etc.
+
+      if (dateField is DateTime) {
+        timestampDate = Timestamp.fromDate(dateField);
+      } else if (dateField is String) {
+        // Tenta parsear a string no formato "M/d/yy, EEEE"
         try {
-          final DateTime parsedDate =
-              DateFormat("M/d/yy, EEEE").parse(dateField);
-          timestampDate = Timestamp.fromDate(parsedDate);
-        } catch (e) {
-          // Se ocorrer erro, usa o Timestamp atual
+          final dt = DateFormat("M/d/yy, EEEE").parse(dateField);
+          timestampDate = Timestamp.fromDate(dt);
+        } catch (_) {
+          // Falha no parse => fallback "agora"
           timestampDate = Timestamp.now();
         }
-      } else if (dateField is DateTime) {
-        timestampDate = Timestamp.fromDate(dateField);
       } else if (dateField is Timestamp) {
         timestampDate = dateField;
       } else {
@@ -46,6 +52,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
       }
 
       if (editMode && docId.isNotEmpty) {
+        // UPDATE
         await collection.doc(docId).update({
           'jobName': timesheetData.jobName,
           'date': timestampDate,
@@ -57,10 +64,11 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'vehicle': timesheetData.vehicle,
           'notes': timesheetData.notes,
           'workers': timesheetData.workers,
-          'userId': userId,
+          'userId': finalUserId,
           'timestamp': FieldValue.serverTimestamp(),
         });
       } else {
+        // CREATE
         await collection.add({
           'jobName': timesheetData.jobName,
           'date': timestampDate,
@@ -72,15 +80,18 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           'vehicle': timesheetData.vehicle,
           'notes': timesheetData.notes,
           'workers': timesheetData.workers,
-          'userId': userId,
+          'userId': finalUserId,
           'timestamp': FieldValue.serverTimestamp(),
         });
       }
+
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Timesheet salvo com sucesso!')));
+        const SnackBar(content: Text('Timesheet salvo com sucesso!')),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao enviar o timesheet: $e')));
+        SnackBar(content: Text('Erro ao enviar o timesheet: $e')),
+      );
     }
   }
 
@@ -91,7 +102,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     final bool editMode = args != null ? (args['editMode'] ?? false) : false;
     final String docId = args != null ? (args['docId'] ?? '') : '';
     final TimesheetData? timesheetData =
-        args != null ? (args['timesheetData'] as TimesheetData?) : null;
+        args != null ? args['timesheetData'] as TimesheetData? : null;
 
     return BaseLayout(
       title: "Timesheet",
@@ -126,10 +137,12 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
               ],
             ),
             const SizedBox(height: 20),
+
             if (timesheetData == null)
               const Text("No Timesheet Data found.")
             else
               _buildReviewLayout(timesheetData),
+
             if (timesheetData != null && timesheetData.notes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
@@ -160,6 +173,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                 ),
               ),
             const SizedBox(height: 20),
+
+            // Botão ou campo para editar a NOTE
             if (!_showNoteField)
               CustomMiniButton(
                 type: MiniButtonType.noteMiniButton,
@@ -180,8 +195,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                     height: 90,
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFFFD0),
-                      border:
-                          Border.all(color: const Color(0xFF0205D3), width: 2),
+                      border: Border.all(color: const Color(0xFF0205D3), width: 2),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -234,6 +248,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
                 ],
               ),
             const SizedBox(height: 20),
+
+            // Botão SUBMIT
             SizedBox(
               width: 330,
               child: Row(
@@ -261,6 +277,18 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     );
   }
 
+  /// Converte DateTime?, String, Timestamp => string de exibição
+  String _displayDate(dynamic date) {
+    if (date is DateTime) {
+      return DateFormat("M/d/yy, EEEE").format(date);
+    } else if (date is String) {
+      return date;
+    } else if (date is Timestamp) {
+      return DateFormat("M/d/yy, EEEE").format(date.toDate());
+    }
+    return ''; // se vier null ou outro tipo
+  }
+
   Widget _buildReviewLayout(TimesheetData data) {
     return Container(
       width: 292,
@@ -274,7 +302,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
           _drawHorizontalLine(),
           _buildLineJobName("JOB NAME:", data.jobName),
           _drawHorizontalLine(),
-          _buildLineDateTmRow(data.date, data.tm),
+          // Ajuste => exibimos date como string formatada
+          _buildLineDateTmRow(_displayDate(data.date), data.tm),
           _drawHorizontalLine(),
           _buildLineJobSize("JOB SIZE:", data.jobSize),
           _drawHorizontalLine(),
@@ -305,21 +334,19 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     );
   }
 
-  Widget _drawHorizontalLine() {
-    return Container(height: 0.5, color: Colors.black);
-  }
+  Widget _drawHorizontalLine() => Container(height: 0.5, color: Colors.black);
 
   Widget _buildLineJobName(String label, String value) {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 64,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
             ),
@@ -342,15 +369,14 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 36,
             child: Text(
               "DATE:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -367,9 +393,9 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
             width: 31,
             child: Text(
               "T.M.:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -390,15 +416,14 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 56,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -425,7 +450,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
             width: 66,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
             ),
@@ -454,7 +480,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
             width: 66,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
             ),
@@ -477,13 +504,13 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 64,
             child: Text(
               "FOREMAN:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
             ),
@@ -502,7 +529,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
             width: 52,
             child: Text(
               "VEHICLE:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
             ),
@@ -531,7 +559,8 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            style:
+                const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           const SizedBox(width: 6),
@@ -579,6 +608,7 @@ class _ReviewTimeSheetScreenState extends State<ReviewTimeSheetScreen> {
         ),
     ];
 
+    // Adiciona linhas em branco extras
     for (int i = 0; i < 4; i++) {
       rows.add(
         TableRow(

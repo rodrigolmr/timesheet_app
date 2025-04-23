@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -19,6 +20,7 @@ import 'screens/preview_receipt_screen.dart';
 import 'screens/receipt_viewer_screen.dart';
 import 'screens/cards_screen.dart';
 import 'services/update_service.dart';
+import 'services/local_timesheet_service.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -26,6 +28,11 @@ final RouteObserver<ModalRoute<void>> routeObserver =
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Inicializa o Hive e o serviço local
+  await Hive.initFlutter();
+  await LocalTimesheetService.init();
+
   runApp(const MyApp());
 }
 
@@ -55,8 +62,8 @@ class MyApp extends StatelessWidget {
         '/receipts': (context) => const ReceiptsScreen(),
         '/preview-receipt': (context) => const PreviewReceiptScreen(),
         '/receipt-viewer': (context) {
-          final args = ModalRoute.of(context)?.settings.arguments
-              as Map<String, dynamic>?;
+          final args =
+              ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
           final imageUrl = args?['imageUrl'] ?? '';
           return ReceiptViewerScreen(imageUrl: imageUrl);
         },

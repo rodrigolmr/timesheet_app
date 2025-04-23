@@ -1,9 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'package:printing/printing.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
@@ -11,6 +9,8 @@ import '../widgets/custom_button_mini.dart';
 import '../widgets/time_sheet_row.dart';
 import '../services/pdf_service.dart';
 import 'package:timesheet_app/main.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/local_timesheet_service.dart';
 
 class TimesheetsScreen extends StatefulWidget {
   const TimesheetsScreen({Key? key}) : super(key: key);
@@ -21,41 +21,53 @@ class TimesheetsScreen extends StatefulWidget {
 
 class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   final ScrollController _scrollController = ScrollController();
-  List<DocumentSnapshot> _timesheets = [];
-  DocumentSnapshot? _lastDocument;
+
+  /// Lista total de timesheets local
+  List<LocalTimesheet> _allLocalTimesheets = [];
+
+  /// Lista filtrada
+  List<LocalTimesheet> _filteredTimesheets = [];
+
   bool _isLoading = false;
-  bool _hasMore = true;
-  final int _pageSize = 35;
   bool _showFilters = false;
-  DateTimeRange? _selectedRange;
-  List<String> _creatorList = ["Creator"];
-  Map<String, String> _usersMap = {};
-  String _selectedCreator = "Creator";
+
+  /// Variáveis de filtro efetivas (realmente aplicadas)
   bool _isDescending = true;
-  final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
+  DateTimeRange? _selectedRange;
+  String _selectedCreator = "Creator";
+  String _jobNameSearch = "";
+  String _tmSearch = "";
+  String _materialSearch = "";
+
+  /// Dados do usuário (role)
   String? _userId;
   String? _userRole;
   bool _isLoadingUser = true;
+
+  /// Lista de creators e map userId->fullName
+  List<String> _creatorList = ["Creator"];
+  Map<String, String> _usersMap = {};
+
+  /// Variáveis candidatas (antes de clicar em Apply)
+  bool _candidateIsDescending = true;
+  DateTimeRange? _candidateSelectedRange;
+  String _candidateSelectedCreator = "Creator";
+  String _candidateJobName = "";
+  String _candidateTm = "";
+  String _candidateMaterial = "";
+
+  /// Controllers dos campos de texto do menu
+  final TextEditingController _jobNameController = TextEditingController();
+  final TextEditingController _tmController = TextEditingController();
+  final TextEditingController _materialController = TextEditingController();
+
+  /// Selecionados p/ gerar PDF
+  final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
 
   @override
   void initState() {
     super.initState();
     _getUserInfo();
-    _scrollController.addListener(() {
-      if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent * 0.9 &&
-          !_isLoading &&
-          _hasMore) {
-        _loadMoreTimesheets();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    routeObserver.unsubscribe(this);
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -65,10 +77,21 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   @override
-  void didPopNext() {
-    _resetAndLoadFirstPage();
+  void dispose() {
+    routeObserver.unsubscribe(this);
+    _scrollController.dispose();
+    _jobNameController.dispose();
+    _tmController.dispose();
+    _materialController.dispose();
+    super.dispose();
   }
 
+  @override
+  void didPopNext() {
+    _syncLocalTimesheets();
+  }
+
+  /// Carrega user e role, depois timesheets
   Future<void> _getUserInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -76,6 +99,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       return;
     }
     _userId = user.uid;
+
     final userDoc =
         await FirebaseFirestore.instance.collection('users').doc(_userId).get();
     if (userDoc.exists && userDoc.data()?['role'] != null) {
@@ -83,89 +107,132 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     } else {
       _userRole = 'User';
     }
-    await _loadCreators();
-    setState(() {
-      _isLoadingUser = false;
-    });
-    _resetAndLoadFirstPage();
+
+    await _loadUsersMap();
+    setState(() => _isLoadingUser = false);
+
+    await _syncLocalTimesheets();
   }
 
-  Future<void> _loadCreators() async {
+  /// Monta map userId -> fullName
+  Future<void> _loadUsersMap() async {
     final snap = await FirebaseFirestore.instance.collection('users').get();
-    final Map<String, String> tempMap = {};
-    final List<String> loaded = [];
+    final tempMap = <String, String>{};
     for (var doc in snap.docs) {
       final data = doc.data();
       final uid = doc.id;
       final fullName =
           ((data["firstName"] ?? "") + " " + (data["lastName"] ?? "")).trim();
-      tempMap[uid] = fullName;
-      if (fullName.isNotEmpty) {
-        loaded.add(fullName);
-      }
+      tempMap[uid] = fullName.isNotEmpty ? fullName : "User";
     }
-    loaded.sort();
-    setState(() {
-      _creatorList = ["Creator", ...loaded];
-      _usersMap = tempMap;
-    });
+    _usersMap = tempMap;
   }
 
-  Query _getBaseQuery() {
-    Query query = FirebaseFirestore.instance
-        .collection("timesheets")
-        .orderBy("date", descending: _isDescending);
-    if (_userRole != "Admin") {
-      query = query.where("userId", isEqualTo: _userId);
-    } else if (_selectedCreator != "Creator") {
-      final uid = _usersMap.entries
-          .firstWhere((e) => e.value == _selectedCreator,
-              orElse: () => const MapEntry("", ""))
-          .key;
-      if (uid.isNotEmpty) {
-        query = query.where("userId", isEqualTo: uid);
-      }
-    }
-    if (_selectedRange != null) {
-      query = query
-          .where("date",
-              isGreaterThanOrEqualTo: Timestamp.fromDate(_selectedRange!.start))
-          .where("date",
-              isLessThanOrEqualTo: Timestamp.fromDate(_selectedRange!.end));
-    }
-    return query;
-  }
+  /// Sincroniza timesheets e filtra
+  Future<void> _syncLocalTimesheets() async {
+    setState(() => _isLoading = true);
 
-  void _resetAndLoadFirstPage() async {
-    setState(() {
-      _timesheets.clear();
-      _lastDocument = null;
-      _hasMore = true;
-    });
-    await _loadMoreTimesheets();
-  }
+    await LocalTimesheetService.syncWithFirestore();
+    final allLocal = LocalTimesheetService.getAllTimesheets();
 
-  Future<void> _loadMoreTimesheets() async {
-    if (_isLoading || !_hasMore) return;
     setState(() {
-      _isLoading = true;
-    });
-    Query query = _getBaseQuery().limit(_pageSize);
-    if (_lastDocument != null) {
-      query = query.startAfterDocument(_lastDocument!);
-    }
-    final snap = await query.get();
-    final docs = snap.docs;
-    if (docs.isNotEmpty) {
-      _lastDocument = docs.last;
-      _timesheets.addAll(docs);
-    }
-    if (docs.length < _pageSize) {
-      _hasMore = false;
-    }
-    setState(() {
+      _allLocalTimesheets = allLocal;
       _isLoading = false;
     });
+
+    _buildCreatorListFromTimesheets();
+    _applyLocalFilters();
+  }
+
+  /// Monta _creatorList com base em userIds presentes
+  void _buildCreatorListFromTimesheets() {
+    final creatorUidSet = <String>{};
+    for (var ts in _allLocalTimesheets) {
+      creatorUidSet.add(ts.userId);
+    }
+    final localCreators = <String>[];
+    for (var uid in creatorUidSet) {
+      if (_usersMap.containsKey(uid)) {
+        localCreators.add(_usersMap[uid]!);
+      }
+    }
+    localCreators.sort();
+    setState(() {
+      _creatorList = ["Creator", ...localCreators];
+    });
+  }
+
+  /// Aplica filtros efetivos
+  void _applyLocalFilters() {
+    List<LocalTimesheet> result = List.from(_allLocalTimesheets);
+
+    // Se user normal
+    if (_userRole != "Admin") {
+      result = result.where((ts) => ts.userId == _userId).toList();
+    } else {
+      // Admin
+      if (_selectedCreator != "Creator") {
+        final uid = _usersMap.entries
+            .firstWhere((e) => e.value == _selectedCreator,
+                orElse: () => const MapEntry("", ""))
+            .key;
+        if (uid.isNotEmpty) {
+          result = result.where((ts) => ts.userId == uid).toList();
+        }
+      }
+    }
+
+    // Range
+    if (_selectedRange != null) {
+      final start = _selectedRange!.start;
+      final end = _selectedRange!.end;
+      result = result.where((ts) {
+        return ts.date.isAfter(start.subtract(const Duration(days: 1))) &&
+            ts.date.isBefore(end.add(const Duration(days: 1)));
+      }).toList();
+    }
+
+    // jobName
+    if (_jobNameSearch.isNotEmpty) {
+      final search = _jobNameSearch.toLowerCase();
+      result = result.where((ts) => ts.jobName.toLowerCase().contains(search)).toList();
+    }
+    // T.M.
+    if (_tmSearch.isNotEmpty) {
+      final search = _tmSearch.toLowerCase();
+      result = result.where((ts) => ts.tm.toLowerCase().contains(search)).toList();
+    }
+    // Material
+    if (_materialSearch.isNotEmpty) {
+      final search = _materialSearch.toLowerCase();
+      result = result.where((ts) => ts.material.toLowerCase().contains(search)).toList();
+    }
+
+    // Ordenação
+    result.sort((a, b) {
+      if (_isDescending) {
+        return b.date.compareTo(a.date);
+      } else {
+        return a.date.compareTo(b.date);
+      }
+    });
+
+    setState(() {
+      _filteredTimesheets = result;
+    });
+  }
+
+  /// Quando clica em Apply, copia do candidato pro efetivo
+  void _applyCandidateFilters() {
+    setState(() {
+      _isDescending = _candidateIsDescending;
+      _selectedRange = _candidateSelectedRange;
+      _selectedCreator = _candidateSelectedCreator;
+      _jobNameSearch = _candidateJobName;
+      _tmSearch = _candidateTm;
+      _materialSearch = _candidateMaterial;
+    });
+    _applyLocalFilters();
   }
 
   @override
@@ -183,18 +250,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           const Center(child: TitleBox(title: "Timesheets")),
           const SizedBox(height: 20),
           _buildTopBarCentered(),
-          Visibility(
-            visible: false,
-            replacement: const SizedBox.shrink(),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0205D3),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () {},
-              child: const Text("Corrigir datas das timesheets"),
-            ),
-          ),
           if (_showFilters) ...[
             const SizedBox(height: 20),
             _buildFilterContainer(context),
@@ -202,9 +257,9 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           Expanded(
             child: Column(
               children: [
-                const SizedBox(height: 20), // Espaço de 20 pixels acima do ListView
+                const SizedBox(height: 20),
                 Expanded(
-                  child: _buildTimesheetListView(_timesheets),
+                  child: _buildTimesheetListView(_filteredTimesheets),
                 ),
               ],
             ),
@@ -214,7 +269,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               padding: EdgeInsets.all(8),
               child: CircularProgressIndicator(),
             ),
-          if (!_isLoading && !_hasMore && _timesheets.isEmpty)
+          if (!_isLoading && _filteredTimesheets.isEmpty)
             const Center(child: Text("No timesheets found.")),
         ],
       ),
@@ -225,6 +280,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     final leftGroup = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // Botão NEW
         CustomButton(
           type: ButtonType.newButton,
           onPressed: () {
@@ -232,6 +288,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           },
         ),
         const SizedBox(width: 20),
+        // PDF se Admin
         if (_userRole == "Admin")
           CustomButton(
             type: ButtonType.pdfButton,
@@ -254,20 +311,37 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
             children: [
               Row(
                 children: [
+                  // BOTÃO sortMiniButton => abre menu
                   CustomMiniButton(
                     type: MiniButtonType.sortMiniButton,
                     onPressed: () {
+                      // Copia efetivo => candidato
                       setState(() {
+                        _candidateIsDescending = _isDescending;
+                        _candidateSelectedRange = _selectedRange;
+                        _candidateSelectedCreator = _selectedCreator;
+                        _candidateJobName = _jobNameSearch;
+                        _candidateTm = _tmSearch;
+                        _candidateMaterial = _materialSearch;
+
+                        // Preenche text controllers
+                        _jobNameController.text = _candidateJobName;
+                        _tmController.text = _candidateTm;
+                        _materialController.text = _candidateMaterial;
+
+                        // Exibe container
                         _showFilters = !_showFilters;
                       });
                     },
                   ),
                   const SizedBox(width: 4),
+                  // selectAll
                   CustomMiniButton(
                     type: MiniButtonType.selectAllMiniButton,
                     onPressed: _handleSelectAll,
                   ),
                   const SizedBox(width: 4),
+                  // deselectAll
                   CustomMiniButton(
                     type: MiniButtonType.deselectAllMiniButton,
                     onPressed: _handleDeselectAll,
@@ -294,12 +368,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             leftGroup,
-            Flexible(
-              child: SizedBox(
-                width: 100, // Máximo de 100 pixels
-                child: const SizedBox.shrink(), // Espaço flexível
-              ),
-            ),
+            Flexible(child: SizedBox(width: 100)),
             rightGroup,
           ],
         ),
@@ -308,135 +377,276 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   Widget _buildFilterContainer(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F0FF),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0277BD),
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(80, 40),
+    // Define highlight com base no efetivo
+    final isDateActive = (_selectedRange != null);
+    final isCreatorActive =
+        (_userRole == "Admin" && _selectedCreator != "Creator");
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F0FF),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: const [
+            BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))
+          ],
+        ),
+        child: Column(
+          children: [
+            // Range e ordenação
+            Row(
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        isDateActive ? Colors.green : const Color(0xFF0277BD),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(80, 40),
+                  ),
+                  onPressed: () => _pickDateRange(context),
+                  child: const Text("Range"),
                 ),
-                onPressed: () => _pickDateRange(context),
-                child: const Text("Range"),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: _selectedRange == null
-                      ? const Text("No date range",
-                          style: TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold))
-                      : Text(
-                          "${DateFormat('MMM/dd').format(_selectedRange!.start)} - ${DateFormat('MMM/dd').format(_selectedRange!.end)}",
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: _candidateSelectedRange == null
+                        ? const Text(
+                            "No date range",
+                            style: TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
+                          )
+                        : Text(
+                            "${DateFormat('MMM/dd').format(_candidateSelectedRange!.start)} - ${DateFormat('MMM/dd').format(_candidateSelectedRange!.end)}",
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              _buildSquareArrowButton(
-                icon: Icons.arrow_upward,
-                isActive: !_isDescending,
-                onTap: () {
-                  setState(() {
-                    _isDescending = false;
-                    _resetAndLoadFirstPage();
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              _buildSquareArrowButton(
-                icon: Icons.arrow_downward,
-                isActive: _isDescending,
-                onTap: () {
-                  setState(() {
-                    _isDescending = true;
-                    _resetAndLoadFirstPage();
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (_userRole == "Admin") ...[
-            Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: const Color(0xFF0205D3), width: 2),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedCreator,
-                  style: const TextStyle(fontSize: 14, color: Colors.black),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedCreator = value;
-                        _resetAndLoadFirstPage();
-                      });
-                    }
+                const SizedBox(width: 8),
+                _buildSquareArrowButton(
+                  icon: Icons.arrow_upward,
+                  // highlight se o real for asc
+                  isActive: !_isDescending,
+                  onTap: () {
+                    setState(() {
+                      _candidateIsDescending = false;
+                    });
                   },
-                  items: _creatorList.map((creator) {
-                    return DropdownMenuItem<String>(
-                      value: creator,
-                      child: Text(creator),
-                    );
-                  }).toList(),
                 ),
-              ),
+                const SizedBox(width: 8),
+                _buildSquareArrowButton(
+                  icon: Icons.arrow_downward,
+                  isActive: _isDescending,
+                  onTap: () {
+                    setState(() {
+                      _candidateIsDescending = true;
+                    });
+                  },
+                ),
+              ],
             ),
             const SizedBox(height: 10),
-          ],
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              CustomMiniButton(
-                type: MiniButtonType.clearAllMiniButton,
-                onPressed: () {
-                  setState(() {
-                    _selectedRange = null;
-                    _selectedCreator = "Creator";
-                    _isDescending = true;
-                    _resetAndLoadFirstPage();
-                  });
-                },
+            if (_userRole == "Admin") ...[
+              Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(
+                    color: isCreatorActive ? Colors.green : const Color(0xFF0205D3),
+                    width: isCreatorActive ? 2 : 1,
+                  ),
+                  boxShadow: isCreatorActive
+                      ? [
+                          BoxShadow(
+                            color: Colors.green.withOpacity(0.4),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _candidateSelectedCreator,
+                    style: const TextStyle(fontSize: 14, color: Colors.black),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _candidateSelectedCreator = value;
+                        });
+                      }
+                    },
+                    items: _creatorList.map((creatorName) {
+                      return DropdownMenuItem<String>(
+                        value: creatorName,
+                        child: Text(creatorName),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
-              CustomMiniButton(
-                type: MiniButtonType.applyMiniButton,
-                onPressed: () {
-                  setState(() {
-                    _showFilters = false;
-                    _resetAndLoadFirstPage();
-                  });
-                },
-              ),
-              CustomMiniButton(
-                type: MiniButtonType.closeMiniButton,
-                onPressed: () {
-                  setState(() {
-                    _showFilters = false;
-                  });
-                },
-              ),
+              const SizedBox(height: 10),
             ],
+            // Job Name
+            _buildSearchField(
+              controller: _jobNameController,
+              label: "Job Name",
+              hintText: "Job Name",
+              // highlight se o real (_jobNameSearch) está em uso
+              isUsed: _jobNameSearch.isNotEmpty,
+              onChanged: (val) {
+                setState(() {
+                  _candidateJobName = val.trim();
+                });
+              },
+            ),
+            // T.M.
+            _buildSearchField(
+              controller: _tmController,
+              label: "T.M.",
+              hintText: "T.M.",
+              isUsed: _tmSearch.isNotEmpty, // real
+              onChanged: (val) {
+                setState(() {
+                  _candidateTm = val.trim();
+                });
+              },
+            ),
+            // Material
+            _buildSearchField(
+              controller: _materialController,
+              label: "Material",
+              hintText: "Material",
+              isUsed: _materialSearch.isNotEmpty, // real
+              onChanged: (val) {
+                setState(() {
+                  _candidateMaterial = val.trim();
+                });
+              },
+            ),
+            // Botoes
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // CLEAR => zera tudo e atualiza IMEDIATAMENTE
+                CustomMiniButton(
+                  type: MiniButtonType.clearAllMiniButton,
+                  onPressed: () {
+                    setState(() {
+                      // zera o candidato
+                      _candidateSelectedRange = null;
+                      _candidateSelectedCreator = "Creator";
+                      _candidateIsDescending = true;
+                      _candidateJobName = "";
+                      _candidateTm = "";
+                      _candidateMaterial = "";
+                      // zera o efetivo
+                      _isDescending = true;
+                      _selectedRange = null;
+                      _selectedCreator = "Creator";
+                      _jobNameSearch = "";
+                      _tmSearch = "";
+                      _materialSearch = "";
+                      // reseta text fields
+                      _jobNameController.clear();
+                      _tmController.clear();
+                      _materialController.clear();
+                    });
+                    // Aplica diretamente
+                    _applyLocalFilters();
+                  },
+                ),
+                // APPLY
+                CustomMiniButton(
+                  type: MiniButtonType.applyMiniButton,
+                  onPressed: () {
+                    _applyCandidateFilters();
+                  },
+                ),
+                // CLOSE
+                CustomMiniButton(
+                  type: MiniButtonType.closeMiniButton,
+                  onPressed: () {
+                    setState(() {
+                      _showFilters = false;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Usa as variáveis reais para ver se o campo está ativo
+  Widget _buildSearchField({
+    required TextEditingController controller,
+    required String label,
+    required String hintText,
+    required bool isUsed,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Container(
+      height: 60,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        // se isUsed, mostra a sombra verde
+        boxShadow: isUsed
+            ? [
+                BoxShadow(
+                  color: Colors.green.withOpacity(0.4),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : [],
+      ),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        textCapitalization: TextCapitalization.words,
+        style: const TextStyle(fontSize: 16, color: Colors.black),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: Colors.black,
           ),
-        ],
+          // floating label
+          floatingLabelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            color: Colors.green,
+          ),
+          hintText: hintText,
+          hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
+          filled: true,
+          fillColor: Colors.white,
+          enabledBorder: OutlineInputBorder(
+            borderSide: BorderSide(
+              color: isUsed ? Colors.green : const Color(0xFF0205D3),
+              width: isUsed ? 2 : 1,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderSide: BorderSide(
+              color: isUsed ? Colors.green : const Color(0xFF0205D3),
+              width: isUsed ? 2 : 1,
+            ),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
       ),
     );
   }
@@ -460,19 +670,16 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     );
   }
 
-  Widget _buildTimesheetListView(List<DocumentSnapshot> docs) {
+  Widget _buildTimesheetListView(List<LocalTimesheet> localDocs) {
     return ListView.builder(
       controller: _scrollController,
-      itemCount: docs.length,
+      itemCount: localDocs.length,
       itemBuilder: (context, index) {
-        final doc = docs[index];
-        final data = doc.data() as Map<String, dynamic>;
-        final docId = doc.id;
-        final userId = data['userId'] ?? '';
-        final userName = _usersMap[userId] ?? "User";
-        final jobName = data['jobName'] ?? '';
-        final timestamp = data['date'] as Timestamp?;
-        final dtParsed = timestamp?.toDate();
+        final item = localDocs[index];
+        final docId = item.docId;
+        final userName = _usersMap[item.userId] ?? "User";
+        final jobName = item.jobName;
+        final dtParsed = item.date;
         final bool isChecked = _selectedTimesheets.containsKey(docId);
 
         String day = '--';
@@ -502,7 +709,10 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               onCheckChanged: (checked) {
                 setState(() {
                   if (checked) {
-                    _selectedTimesheets[docId] = data;
+                    _selectedTimesheets[docId] = {
+                      'userId': item.userId,
+                      'jobName': item.jobName,
+                    };
                   } else {
                     _selectedTimesheets.remove(docId);
                   }
@@ -519,8 +729,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     final now = DateTime.now();
     final selected = await showDateRangePicker(
       context: context,
-      initialDateRange:
-          _selectedRange ??
+      initialDateRange: _candidateSelectedRange ??
           DateTimeRange(
             start: now.subtract(const Duration(days: 7)),
             end: now,
@@ -530,8 +739,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     );
     if (selected != null) {
       setState(() {
-        _selectedRange = selected;
-        _resetAndLoadFirstPage();
+        _candidateSelectedRange = selected;
       });
     }
   }
@@ -556,9 +764,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   void _handleSelectAll() {
-    for (var doc in _timesheets) {
-      final data = doc.data() as Map<String, dynamic>;
-      _selectedTimesheets[doc.id] = data;
+    for (var item in _filteredTimesheets) {
+      _selectedTimesheets[item.docId] = {
+        'userId': item.userId,
+        'jobName': item.jobName,
+      };
     }
     setState(() {});
   }

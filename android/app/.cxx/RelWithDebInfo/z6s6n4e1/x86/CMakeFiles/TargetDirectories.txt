@@ -1,0 +1,2 @@
+/Users/rodrigorocha/timesheet_app/android/app/.cxx/RelWithDebInfo/z6s6n4e1/x86/CMakeFiles/edit_cache.dir
+/Users/rodrigorocha/timesheet_app/android/app/.cxx/RelWithDebInfo/z6s6n4e1/x86/CMakeFiles/rebuild_cache.dir

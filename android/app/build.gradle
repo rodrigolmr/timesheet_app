@@ -22,6 +22,8 @@ android {
     namespace = "com.centralislandfloors.timesheetApp.android"
     compileSdk = 35
 
+    ndkVersion "29.0.13113456"
+
     defaultConfig {
         applicationId = "com.centralislandfloors.timesheetApp.android"
         minSdk = 23
@@ -55,6 +57,7 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        // isCoreLibraryDesugaringEnabled = true // Remova ou comente esta linha
     }
 
     kotlinOptions {
@@ -81,6 +84,7 @@ dependencies {
     implementation platform("com.google.firebase:firebase-bom:33.8.0")
     implementation "com.google.firebase:firebase-auth"
     implementation "com.google.firebase:firebase-firestore"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.3" // Mantenha a dependência para habilitar o desugaring
 }
 
 // Tarefa customizada para copiar o APK final para um diretório externo com o nome desejado

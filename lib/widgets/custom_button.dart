@@ -21,6 +21,7 @@ enum ButtonType {
   uploadReceiptButton,
   cardsButton,
   columnsButton,
+  searchButton,
 }
 
 class CustomButton extends StatelessWidget {
@@ -327,8 +328,24 @@ class CustomButton extends StatelessWidget {
         return {
           'label': 'Columns',
           'faIcon': FontAwesomeIcons.columns,
-          'backgroundColor': const Color(0xFFBDBDBD), // Cinza claro
-          'borderColor': const Color(0xFFBDBDBD),    // Cinza claro
+          'backgroundColor': const Color(0xFFBDBDBD),
+          'borderColor': const Color(0xFFBDBDBD),
+          'iconColor': Colors.white,
+          'textColor': Colors.white,
+          'height': 60.0,
+          'width': 60.0,
+          'iconSize': 24.0,
+          'textSize': 12.0,
+          'lineHeight': 1.0,
+          'iconSpacing': 4.0,
+          'hasIcon': true,
+        };
+      case ButtonType.searchButton:
+        return {
+          'label': 'Search',
+          'faIcon': FontAwesomeIcons.search,
+          'backgroundColor': const Color(0xFF3F51B5),
+          'borderColor': const Color(0xFF3F51B5),
           'iconColor': Colors.white,
           'textColor': Colors.white,
           'height': 60.0,

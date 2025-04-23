@@ -1,3 +1,5 @@
+// lib/screens/timesheet_view_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +11,12 @@ import '../widgets/custom_button_mini.dart';
 
 class TimesheetViewScreen extends StatelessWidget {
   const TimesheetViewScreen({Key? key}) : super(key: key);
+
+  /// Deixe APENAS UMA função `_formatDate`.
+  String _formatDate(DateTime? dt) {
+    if (dt == null) return '--';
+    return DateFormat('M/d/yy').format(dt);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -77,14 +85,16 @@ class TimesheetViewScreen extends StatelessWidget {
 
                   final doc = snapshot.data!;
                   final jobName = doc.get('jobName') ?? '';
+
+                  // Convertendo doc['date'] => DateTime?
                   final dateField = doc.get('date');
-                  String date;
+                  DateTime? dt;
                   if (dateField is Timestamp) {
-                    date =
-                        DateFormat("M/d/yy, EEEE").format(dateField.toDate());
+                    dt = dateField.toDate();
                   } else {
-                    date = dateField.toString();
+                    dt = null;
                   }
+
                   final tm = doc.get('tm') ?? '';
                   final jobSize = doc.get('jobSize') ?? '';
                   final material = doc.get('material') ?? '';
@@ -109,7 +119,7 @@ class TimesheetViewScreen extends StatelessWidget {
 
                   final timesheetData = TimesheetData(
                     jobName: jobName,
-                    date: date,
+                    date: dt, // DateTime?
                     tm: tm,
                     jobSize: jobSize,
                     material: material,
@@ -199,7 +209,8 @@ class TimesheetViewScreen extends StatelessWidget {
               _drawHorizontalLine(),
               _buildLineJobName("JOB NAME:", data.jobName),
               _drawHorizontalLine(),
-              _buildLineDateTmRow(data.date, data.tm),
+              // Chama _formatDate(data.date) => string
+              _buildLineDateTmRow(_formatDate(data.date), data.tm),
               _drawHorizontalLine(),
               _buildLineJobSize("JOB SIZE:", data.jobSize),
               _drawHorizontalLine(),
@@ -266,15 +277,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 64,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -283,7 +293,6 @@ class TimesheetViewScreen extends StatelessWidget {
               value,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -295,15 +304,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 36,
             child: Text(
               "DATE:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -312,7 +320,6 @@ class TimesheetViewScreen extends StatelessWidget {
               dateValue,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           Container(width: 0.5, color: Colors.black),
@@ -320,9 +327,9 @@ class TimesheetViewScreen extends StatelessWidget {
             width: 31,
             child: Text(
               "T.M.:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -331,7 +338,6 @@ class TimesheetViewScreen extends StatelessWidget {
               tmValue,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -343,15 +349,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 56,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -360,7 +365,6 @@ class TimesheetViewScreen extends StatelessWidget {
               value,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -372,15 +376,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 52),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 66,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -389,7 +392,6 @@ class TimesheetViewScreen extends StatelessWidget {
               value,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.visible,
             ),
           ),
         ],
@@ -401,15 +403,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 52),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 66,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -418,7 +419,6 @@ class TimesheetViewScreen extends StatelessWidget {
               value,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.visible,
             ),
           ),
         ],
@@ -430,15 +430,14 @@ class TimesheetViewScreen extends StatelessWidget {
     return SizedBox(
       height: 18,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: 64,
             child: Text(
               "FOREMAN:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -447,7 +446,6 @@ class TimesheetViewScreen extends StatelessWidget {
               foreman,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           Container(width: 0.5, color: Colors.black),
@@ -455,9 +453,9 @@ class TimesheetViewScreen extends StatelessWidget {
             width: 52,
             child: Text(
               "VEHICLE:",
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
           SizedBox(
@@ -466,7 +464,6 @@ class TimesheetViewScreen extends StatelessWidget {
               vehicle,
               style: const TextStyle(fontSize: 11),
               textAlign: TextAlign.left,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -531,6 +528,8 @@ class TimesheetViewScreen extends StatelessWidget {
           ],
         ),
     ];
+
+    // Adiciona 4 linhas em branco
     for (int i = 0; i < 4; i++) {
       rows.add(
         TableRow(
@@ -541,6 +540,7 @@ class TimesheetViewScreen extends StatelessWidget {
         ),
       );
     }
+
     return SizedBox(
       width: 290,
       child: Table(
