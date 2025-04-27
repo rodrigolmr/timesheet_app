@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert'; // se formos usar jsonDecode
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -22,33 +23,30 @@ class TimesheetsScreen extends StatefulWidget {
 class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   final ScrollController _scrollController = ScrollController();
 
-  /// Lista total de timesheets local
+  // Listas de timesheets local
   List<LocalTimesheet> _allLocalTimesheets = [];
-
-  /// Lista filtrada
   List<LocalTimesheet> _filteredTimesheets = [];
 
   bool _isLoading = false;
   bool _showFilters = false;
-
-  /// Variáveis de filtro efetivas (realmente aplicadas)
   bool _isDescending = true;
+
   DateTimeRange? _selectedRange;
   String _selectedCreator = "Creator";
   String _jobNameSearch = "";
   String _tmSearch = "";
   String _materialSearch = "";
 
-  /// Dados do usuário (role)
+  // Dados do usuário
   String? _userId;
   String? _userRole;
   bool _isLoadingUser = true;
 
-  /// Lista de creators e map userId->fullName
+  // Para dropdown de creators
   List<String> _creatorList = ["Creator"];
   Map<String, String> _usersMap = {};
 
-  /// Variáveis candidatas (antes de clicar em Apply)
+  // Variáveis de filtro "candidatas" (antes de Apply)
   bool _candidateIsDescending = true;
   DateTimeRange? _candidateSelectedRange;
   String _candidateSelectedCreator = "Creator";
@@ -56,13 +54,13 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   String _candidateTm = "";
   String _candidateMaterial = "";
 
-  /// Controllers dos campos de texto do menu
+  // Controladores
   final TextEditingController _jobNameController = TextEditingController();
   final TextEditingController _tmController = TextEditingController();
   final TextEditingController _materialController = TextEditingController();
 
-  /// Selecionados p/ gerar PDF
-  final Map<String, Map<String, dynamic>> _selectedTimesheets = {};
+  // Em vez de Map<String,Map<...>>, agora só armazenamos os IDs selecionados
+  final Set<String> _selectedDocIds = {};
 
   @override
   void initState() {
@@ -91,7 +89,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     _syncLocalTimesheets();
   }
 
-  /// Carrega user e role, depois timesheets
   Future<void> _getUserInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
@@ -114,7 +111,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     await _syncLocalTimesheets();
   }
 
-  /// Monta map userId -> fullName
   Future<void> _loadUsersMap() async {
     final snap = await FirebaseFirestore.instance.collection('users').get();
     final tempMap = <String, String>{};
@@ -128,7 +124,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     _usersMap = tempMap;
   }
 
-  /// Sincroniza timesheets e filtra
   Future<void> _syncLocalTimesheets() async {
     setState(() => _isLoading = true);
 
@@ -144,7 +139,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     _applyLocalFilters();
   }
 
-  /// Monta _creatorList com base em userIds presentes
   void _buildCreatorListFromTimesheets() {
     final creatorUidSet = <String>{};
     for (var ts in _allLocalTimesheets) {
@@ -162,15 +156,12 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     });
   }
 
-  /// Aplica filtros efetivos
   void _applyLocalFilters() {
     List<LocalTimesheet> result = List.from(_allLocalTimesheets);
 
-    // Se user normal
     if (_userRole != "Admin") {
       result = result.where((ts) => ts.userId == _userId).toList();
     } else {
-      // Admin
       if (_selectedCreator != "Creator") {
         final uid = _usersMap.entries
             .firstWhere((e) => e.value == _selectedCreator,
@@ -182,7 +173,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       }
     }
 
-    // Range
     if (_selectedRange != null) {
       final start = _selectedRange!.start;
       final end = _selectedRange!.end;
@@ -192,23 +182,19 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       }).toList();
     }
 
-    // jobName
     if (_jobNameSearch.isNotEmpty) {
       final search = _jobNameSearch.toLowerCase();
       result = result.where((ts) => ts.jobName.toLowerCase().contains(search)).toList();
     }
-    // T.M.
     if (_tmSearch.isNotEmpty) {
       final search = _tmSearch.toLowerCase();
       result = result.where((ts) => ts.tm.toLowerCase().contains(search)).toList();
     }
-    // Material
     if (_materialSearch.isNotEmpty) {
       final search = _materialSearch.toLowerCase();
       result = result.where((ts) => ts.material.toLowerCase().contains(search)).toList();
     }
 
-    // Ordenação
     result.sort((a, b) {
       if (_isDescending) {
         return b.date.compareTo(a.date);
@@ -222,7 +208,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     });
   }
 
-  /// Quando clica em Apply, copia do candidato pro efetivo
   void _applyCandidateFilters() {
     setState(() {
       _isDescending = _candidateIsDescending;
@@ -280,7 +265,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     final leftGroup = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Botão NEW
         CustomButton(
           type: ButtonType.newButton,
           onPressed: () {
@@ -288,11 +272,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
           },
         ),
         const SizedBox(width: 20),
-        // PDF se Admin
         if (_userRole == "Admin")
           CustomButton(
             type: ButtonType.pdfButton,
-            onPressed: _selectedTimesheets.isEmpty
+            // Ajustamos para checar se _selectedDocIds está vazio
+            onPressed: _selectedDocIds.isEmpty
                 ? () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -305,17 +289,17 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       ],
     );
 
+    // Repare que a UI exibe "Selected: ${_selectedTimesheets.length}" 
+    // mas trocaremos para _selectedDocIds.length (sem mudar o layout).
     final rightGroup = _userRole == "Admin"
         ? Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 children: [
-                  // BOTÃO sortMiniButton => abre menu
                   CustomMiniButton(
                     type: MiniButtonType.sortMiniButton,
                     onPressed: () {
-                      // Copia efetivo => candidato
                       setState(() {
                         _candidateIsDescending = _isDescending;
                         _candidateSelectedRange = _selectedRange;
@@ -324,24 +308,20 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                         _candidateTm = _tmSearch;
                         _candidateMaterial = _materialSearch;
 
-                        // Preenche text controllers
                         _jobNameController.text = _candidateJobName;
                         _tmController.text = _candidateTm;
                         _materialController.text = _candidateMaterial;
 
-                        // Exibe container
                         _showFilters = !_showFilters;
                       });
                     },
                   ),
                   const SizedBox(width: 4),
-                  // selectAll
                   CustomMiniButton(
                     type: MiniButtonType.selectAllMiniButton,
                     onPressed: _handleSelectAll,
                   ),
                   const SizedBox(width: 4),
-                  // deselectAll
                   CustomMiniButton(
                     type: MiniButtonType.deselectAllMiniButton,
                     onPressed: _handleDeselectAll,
@@ -350,7 +330,8 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               ),
               const SizedBox(height: 4),
               Text(
-                "Selected: ${_selectedTimesheets.length}",
+                // Trocamos _selectedTimesheets.length -> _selectedDocIds.length
+                "Selected: ${_selectedDocIds.length}",
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -377,7 +358,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   Widget _buildFilterContainer(BuildContext context) {
-    // Define highlight com base no efetivo
     final isDateActive = (_selectedRange != null);
     final isCreatorActive =
         (_userRole == "Admin" && _selectedCreator != "Creator");
@@ -430,7 +410,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                 const SizedBox(width: 8),
                 _buildSquareArrowButton(
                   icon: Icons.arrow_upward,
-                  // highlight se o real for asc
                   isActive: !_isDescending,
                   onTap: () {
                     setState(() {
@@ -494,12 +473,10 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               ),
               const SizedBox(height: 10),
             ],
-            // Job Name
             _buildSearchField(
               controller: _jobNameController,
               label: "Job Name",
               hintText: "Job Name",
-              // highlight se o real (_jobNameSearch) está em uso
               isUsed: _jobNameSearch.isNotEmpty,
               onChanged: (val) {
                 setState(() {
@@ -507,70 +484,62 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
                 });
               },
             ),
-            // T.M.
             _buildSearchField(
               controller: _tmController,
               label: "T.M.",
               hintText: "T.M.",
-              isUsed: _tmSearch.isNotEmpty, // real
+              isUsed: _tmSearch.isNotEmpty,
               onChanged: (val) {
                 setState(() {
                   _candidateTm = val.trim();
                 });
               },
             ),
-            // Material
             _buildSearchField(
               controller: _materialController,
               label: "Material",
               hintText: "Material",
-              isUsed: _materialSearch.isNotEmpty, // real
+              isUsed: _materialSearch.isNotEmpty,
               onChanged: (val) {
                 setState(() {
                   _candidateMaterial = val.trim();
                 });
               },
             ),
-            // Botoes
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // CLEAR => zera tudo e atualiza IMEDIATAMENTE
                 CustomMiniButton(
                   type: MiniButtonType.clearAllMiniButton,
                   onPressed: () {
                     setState(() {
-                      // zera o candidato
                       _candidateSelectedRange = null;
                       _candidateSelectedCreator = "Creator";
                       _candidateIsDescending = true;
                       _candidateJobName = "";
                       _candidateTm = "";
                       _candidateMaterial = "";
-                      // zera o efetivo
+
                       _isDescending = true;
                       _selectedRange = null;
                       _selectedCreator = "Creator";
                       _jobNameSearch = "";
                       _tmSearch = "";
                       _materialSearch = "";
-                      // reseta text fields
+
                       _jobNameController.clear();
                       _tmController.clear();
                       _materialController.clear();
                     });
-                    // Aplica diretamente
                     _applyLocalFilters();
                   },
                 ),
-                // APPLY
                 CustomMiniButton(
                   type: MiniButtonType.applyMiniButton,
                   onPressed: () {
                     _applyCandidateFilters();
                   },
                 ),
-                // CLOSE
                 CustomMiniButton(
                   type: MiniButtonType.closeMiniButton,
                   onPressed: () {
@@ -587,7 +556,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     );
   }
 
-  /// Usa as variáveis reais para ver se o campo está ativo
   Widget _buildSearchField({
     required TextEditingController controller,
     required String label,
@@ -599,7 +567,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       height: 60,
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        // se isUsed, mostra a sombra verde
         boxShadow: isUsed
             ? [
                 BoxShadow(
@@ -622,7 +589,6 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
             fontSize: 16,
             color: Colors.black,
           ),
-          // floating label
           floatingLabelStyle: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 12,
@@ -670,6 +636,7 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
     );
   }
 
+  // Agora só armazenamos docIds em _selectedDocIds
   Widget _buildTimesheetListView(List<LocalTimesheet> localDocs) {
     return ListView.builder(
       controller: _scrollController,
@@ -677,10 +644,11 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
       itemBuilder: (context, index) {
         final item = localDocs[index];
         final docId = item.docId;
+
         final userName = _usersMap[item.userId] ?? "User";
         final jobName = item.jobName;
         final dtParsed = item.date;
-        final bool isChecked = _selectedTimesheets.containsKey(docId);
+        final bool isChecked = _selectedDocIds.contains(docId);
 
         String day = '--';
         String month = '--';
@@ -709,12 +677,9 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
               onCheckChanged: (checked) {
                 setState(() {
                   if (checked) {
-                    _selectedTimesheets[docId] = {
-                      'userId': item.userId,
-                      'jobName': item.jobName,
-                    };
+                    _selectedDocIds.add(docId);
                   } else {
-                    _selectedTimesheets.remove(docId);
+                    _selectedDocIds.remove(docId);
                   }
                 });
               },
@@ -745,14 +710,15 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
   }
 
   Future<void> _generatePdf() async {
-    if (_selectedTimesheets.isEmpty) {
+    if (_selectedDocIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No timesheet selected.")),
       );
       return;
     }
     try {
-      await PdfService().generateTimesheetPdf(_selectedTimesheets);
+      // Passamos apenas a lista de docIds
+      await PdfService().generateTimesheetPdf(_selectedDocIds.toList());
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("PDF generated successfully!")),
       );
@@ -765,17 +731,14 @@ class _TimesheetsScreenState extends State<TimesheetsScreen> with RouteAware {
 
   void _handleSelectAll() {
     for (var item in _filteredTimesheets) {
-      _selectedTimesheets[item.docId] = {
-        'userId': item.userId,
-        'jobName': item.jobName,
-      };
+      _selectedDocIds.add(item.docId);
     }
     setState(() {});
   }
 
   void _handleDeselectAll() {
     setState(() {
-      _selectedTimesheets.clear();
+      _selectedDocIds.clear();
     });
   }
 }

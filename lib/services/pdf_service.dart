@@ -1,57 +1,56 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../services/local_timesheet_service.dart';
 
 class PdfService {
-  Future<void> generateTimesheetPdf(
-      Map<String, Map<String, dynamic>> selectedTimesheets) async {
-    if (selectedTimesheets.isEmpty) {
+  Future<void> generateTimesheetPdf(List<String> docIds) async {
+    if (docIds.isEmpty) {
       throw Exception("Nenhum timesheet selecionado!");
     }
 
     try {
       final pdf = pw.Document();
 
-      selectedTimesheets.forEach((docId, data) {
-        final jobName = data['jobName'] ?? '';
-
-        // ✅ CONVERSÃO SEGURA DO CAMPO "date"
-        final dynamic rawDate = data['date'];
-        String date = '';
-        if (rawDate is Timestamp) {
-          date = DateFormat("M/d/yy, EEEE").format(rawDate.toDate());
-        } else if (rawDate is DateTime) {
-          date = DateFormat("M/d/yy, EEEE").format(rawDate);
-        } else if (rawDate is String) {
-          date = rawDate;
+      for (var docId in docIds) {
+        // Buscar do Hive o LocalTimesheet correspondente
+        final item = _getLocalTimesheet(docId);
+        if (item == null) {
+          // Se não achar, pode ignorar ou dar erro
+          continue;
         }
 
-        final tm = data['tm'] ?? '';
-        final jobSize = data['jobSize'] ?? '';
-        final material = data['material'] ?? '';
-        final jobDesc = data['jobDesc'] ?? '';
-        final foreman = data['foreman'] ?? '';
-        final vehicle = data['vehicle'] ?? '';
-        final notes = data['notes'] ?? '';
-        final List<dynamic> workersRaw = data['workers'] ?? [];
-        final List<Map<String, dynamic>> workers = workersRaw.map((item) {
-          if (item is Map<String, dynamic>) {
-            return {
-              'name': item['name'] ?? '',
-              'start': item['start'] ?? '',
-              'finish': item['finish'] ?? '',
-              'hours': item['hours'] ?? '',
-              'travel': item['travel'] ?? '',
-              'meal': item['meal'] ?? '',
-            };
-          }
-          return <String, dynamic>{};
+        // Conversão de data
+        final dateStr = DateFormat("M/d/yy, EEEE").format(item.date);
+
+        final jobName = item.jobName;
+        final tm = item.tm;
+        final jobSize = item.jobSize;
+        final material = item.material;
+        final jobDesc = item.jobDesc;
+        final foreman = item.foreman;
+        final vehicle = item.vehicle;
+        final notes = item.notes;
+
+        // Parse workers
+        // Lembrando que item.workers é getter que decodifica JSON
+        final workers = item.workers.map((w) {
+          return {
+            'name': w['name'] ?? '',
+            'start': w['start'] ?? '',
+            'finish': w['finish'] ?? '',
+            'hours': w['hours'] ?? '',
+            'travel': w['travel'] ?? '',
+            'meal': w['meal'] ?? '',
+          };
         }).toList();
 
+        // Constrói o PDF
         pdf.addPage(
           pw.Page(
             pageFormat: PdfPageFormat.letter,
@@ -63,7 +62,7 @@ class PdfService {
                     _buildTitle(),
                     _buildJobDetails(
                       jobName,
-                      date,
+                      dateStr,
                       tm,
                       jobSize,
                       material,
@@ -79,7 +78,7 @@ class PdfService {
             },
           ),
         );
-      });
+      }
 
       final bytes = await pdf.save();
       final dir = await getApplicationDocumentsDirectory();
@@ -91,6 +90,16 @@ class PdfService {
       );
     } catch (e) {
       throw Exception("Erro ao gerar PDF: $e");
+    }
+  }
+
+  // Método helper para encontrar o LocalTimesheet pelo docId
+  LocalTimesheet? _getLocalTimesheet(String docId) {
+    final box = LocalTimesheetService.box;
+    try {
+      return box.values.firstWhere((ts) => ts.docId == docId);
+    } catch (_) {
+      return null;
     }
   }
 
@@ -294,9 +303,6 @@ class PdfService {
       decoration: pw.BoxDecoration(
         border: pw.Border(
           top: pw.BorderSide(color: PdfColors.black, width: 0.5),
-          left: pw.BorderSide.none,
-          right: pw.BorderSide.none,
-          bottom: pw.BorderSide.none,
         ),
       ),
       child: pw.Row(

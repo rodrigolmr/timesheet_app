@@ -24,13 +24,19 @@ class LocalTimesheetAdapter extends TypeAdapter<LocalTimesheet> {
       material: fields[4] as String,
       date: fields[5] as DateTime,
       updatedAt: fields[6] as DateTime,
+      jobSize: fields[7] as String,
+      jobDesc: fields[8] as String,
+      foreman: fields[9] as String,
+      vehicle: fields[10] as String,
+      notes: fields[11] as String,
+      workersJson: fields[12] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, LocalTimesheet obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.docId)
       ..writeByte(1)
@@ -44,7 +50,19 @@ class LocalTimesheetAdapter extends TypeAdapter<LocalTimesheet> {
       ..writeByte(5)
       ..write(obj.date)
       ..writeByte(6)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(7)
+      ..write(obj.jobSize)
+      ..writeByte(8)
+      ..write(obj.jobDesc)
+      ..writeByte(9)
+      ..write(obj.foreman)
+      ..writeByte(10)
+      ..write(obj.vehicle)
+      ..writeByte(11)
+      ..write(obj.notes)
+      ..writeByte(12)
+      ..write(obj.workersJson);
   }
 
   @override

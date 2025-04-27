@@ -29,8 +29,14 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Inicializa o Hive e o serviço local
+  // Inicializa o Hive:
   await Hive.initFlutter();
+
+  // Apaga o box antigo do disco (todos os dados são perdidos localmente).
+  // Assim, você evita o erro de schema ao abrir o box.
+  await Hive.deleteBoxFromDisk('local_timesheets');
+
+  // Agora inicializa o LocalTimesheetService (que faz openBox).
   await LocalTimesheetService.init();
 
   runApp(const MyApp());
@@ -75,6 +81,7 @@ class MyApp extends StatelessWidget {
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({Key? key}) : super(key: key);
+
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
 }

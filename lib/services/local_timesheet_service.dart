@@ -1,4 +1,4 @@
-// local_timesheet_service.dart
+import 'dart:convert'; // <-- para jsonEncode/jsonDecode
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:hive/hive.dart';
 
@@ -8,18 +8,44 @@ part 'local_timesheet_service.g.dart';
 class LocalTimesheet extends HiveObject {
   @HiveField(0)
   String docId;
+
   @HiveField(1)
   String userId;
+
   @HiveField(2)
   String jobName;
+
   @HiveField(3)
   String tm;
+
   @HiveField(4)
   String material;
+
   @HiveField(5)
   DateTime date;
+
   @HiveField(6)
   DateTime updatedAt;
+
+  // Campos extras
+  @HiveField(7)
+  String jobSize;
+
+  @HiveField(8)
+  String jobDesc;
+
+  @HiveField(9)
+  String foreman;
+
+  @HiveField(10)
+  String vehicle;
+
+  @HiveField(11)
+  String notes;
+
+  // Armazenamos a lista de workers em JSON
+  @HiveField(12)
+  String workersJson;
 
   LocalTimesheet({
     required this.docId,
@@ -29,7 +55,28 @@ class LocalTimesheet extends HiveObject {
     required this.material,
     required this.date,
     required this.updatedAt,
+    this.jobSize = '',
+    this.jobDesc = '',
+    this.foreman = '',
+    this.vehicle = '',
+    this.notes = '',
+    this.workersJson = '[]',
   });
+
+  /// Getter que decodifica o 'workersJson' e retorna uma lista de mapas
+  List<Map<String, dynamic>> get workers {
+    try {
+      final decoded = jsonDecode(workersJson);
+      if (decoded is List) {
+        return decoded
+            .map((e) => (e as Map).cast<String, dynamic>())
+            .toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
 }
 
 class LocalTimesheetService {
@@ -64,8 +111,10 @@ class LocalTimesheetService {
     final snap = await FirebaseFirestore.instance
         .collection('timesheets')
         .get();
+
     for (var doc in snap.docs) {
       final data = doc.data();
+
       final item = LocalTimesheet(
         docId: doc.id,
         userId: data['userId'] ?? '',
@@ -74,7 +123,18 @@ class LocalTimesheetService {
         material: data['material'] ?? '',
         date: (data['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
         updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+
+        jobSize: data['jobSize'] ?? '',
+        jobDesc: data['jobDesc'] ?? '',
+        foreman: data['foreman'] ?? '',
+        vehicle: data['vehicle'] ?? '',
+        notes: data['notes'] ?? '',
+        // Convertendo a lista de workers em JSON
+        workersJson: data['workers'] != null
+            ? jsonEncode(data['workers'])
+            : '[]',
       );
+
       await saveOrUpdate(item);
     }
   }
