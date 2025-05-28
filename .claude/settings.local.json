@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/mnt/c/flutter/bin/flutter run)",
+      "Bash(dart:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ],
+    "deny": []
+  },
+  "enableAllProjectMcpServers": false
+}

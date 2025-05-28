@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
@@ -9,6 +10,8 @@ import 'package:cross_file/cross_file.dart';
 import '../widgets/base_layout.dart';
 import '../widgets/title_box.dart';
 import '../widgets/custom_button.dart';
+import '../utils/web_download_helper_stub.dart'
+    if (dart.library.html) '../utils/web_download_helper.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -132,19 +135,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         }
       }
       
-      // Criar arquivo JSON para cada coleção
-      final directory = await getApplicationDocumentsDirectory();
-      final files = <File>[];
-      
-      for (final entry in collectionData.entries) {
-        final jsonContent = entry.value;
-        final file = File('${directory.path}/${entry.key}.json');
-        await file.writeAsString(jsonEncode(jsonContent));
-        files.add(file);
-      }
-      
-      // Se não houver arquivos, mostrar mensagem
-      if (files.isEmpty) {
+      // Se não houver dados, mostrar mensagem
+      if (collectionData.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Nenhum dado encontrado para exportar')),
         );
@@ -154,17 +146,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
 
-      // Compartilhar arquivos
-      final xFiles = files.map((f) => XFile(f.path)).toList();
-      await Share.shareXFiles(
-        xFiles,
-        subject: 'Backup do Banco de Dados',
-        text: 'Backup completo do banco de dados em formato JSON',
-      );
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Banco de dados exportado com sucesso! Coleções exportadas: $successfulCollections')),
-      );
+      // Verificar se está rodando na web
+      if (kIsWeb) {
+        // Para web, fazer download direto no navegador
+        WebDownloadHelper.downloadMultipleJsonFiles(collectionData);
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Banco de dados exportado com sucesso! Coleções exportadas: $successfulCollections')),
+        );
+      } else {
+        // Para mobile/desktop, usar share_plus
+        final directory = await getApplicationDocumentsDirectory();
+        final files = <File>[];
+        
+        for (final entry in collectionData.entries) {
+          final jsonContent = entry.value;
+          final file = File('${directory.path}/${entry.key}.json');
+          await file.writeAsString(jsonEncode(jsonContent));
+          files.add(file);
+        }
+        
+        // Compartilhar arquivos
+        final xFiles = files.map((f) => XFile(f.path)).toList();
+        await Share.shareXFiles(
+          xFiles,
+          subject: 'Backup do Banco de Dados',
+          text: 'Backup completo do banco de dados em formato JSON',
+        );
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Banco de dados exportado com sucesso! Coleções exportadas: $successfulCollections')),
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao exportar: ${e.toString()}')),
