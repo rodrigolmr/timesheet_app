@@ -39,10 +39,13 @@ dependencies:
   http: ^1.2.1
   dio: ^5.8.0+1
   open_file: ^3.5.10
+  csv: ^5.1.1
+  share_plus: ^11.0.0
 
   # ✅ Hive em runtime
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  cross_file: ^0.3.4+2
 
 dev_dependencies:
   flutter_test:

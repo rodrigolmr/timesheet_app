@@ -22,6 +22,7 @@ enum ButtonType {
   cardsButton,
   columnsButton,
   searchButton,
+  exportButton,
 }
 
 class CustomButton extends StatelessWidget {
@@ -346,6 +347,22 @@ class CustomButton extends StatelessWidget {
           'faIcon': FontAwesomeIcons.search,
           'backgroundColor': const Color(0xFF3F51B5),
           'borderColor': const Color(0xFF3F51B5),
+          'iconColor': Colors.white,
+          'textColor': Colors.white,
+          'height': 60.0,
+          'width': 60.0,
+          'iconSize': 24.0,
+          'textSize': 12.0,
+          'lineHeight': 1.0,
+          'iconSpacing': 4.0,
+          'hasIcon': true,
+        };
+      case ButtonType.exportButton:
+        return {
+          'label': 'Export',
+          'faIcon': FontAwesomeIcons.fileExport,
+          'backgroundColor': const Color(0xFF4CAF50),
+          'borderColor': const Color(0xFF4CAF50),
           'iconColor': Colors.white,
           'textColor': Colors.white,
           'height': 60.0,
